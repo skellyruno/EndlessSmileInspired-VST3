@@ -1,6 +1,6 @@
 #include "PluginEditor.h"
 EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEditor(EndlessSmileInspiredAudioProcessor& p)
-: AudioProcessorEditor(&p), processor(p), intensity("intensity", &p.state, "intensity"), preset("preset", &p.state, "preset"), mix("mix", &p.state, "mix")
+: AudioProcessorEditor(&p), processor(p)
 {
     setSize(900,510); setResizable(true,true);
     intensity.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag); intensity.setTextBoxStyle(juce::Slider::TextBoxBelow,false,90,24);
@@ -9,6 +9,9 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     preset.addItem("FIST IN THE AIR",4); preset.addItem("DADA DYNAMITE",5); preset.addItem("BROKEN TEETH",6); preset.addItem("EXTREME",7);
     addAndMakeVisible(preset);
     mix.setSliderStyle(juce::Slider::LinearHorizontal); mix.setTextBoxStyle(juce::Slider::TextBoxRight,false,55,22); mix.setRange(0,1,.01); addAndMakeVisible(mix);
+    intensityAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state, "intensity", intensity);
+    mixAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state, "mix", mix);
+    presetAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state, "preset", preset);
     startTimerHz(30);
 }
 void EndlessSmileInspiredAudioProcessorEditor::paint(juce::Graphics& g)
@@ -35,11 +38,16 @@ void EndlessSmileInspiredAudioProcessorEditor::paint(juce::Graphics& g)
     juce::Path mouth; mouth.startNewSubPath(x-w,y+rad*.18f); mouth.quadraticTo(x,y+rad*.18f+h*2,x+w,y+rad*.18f); mouth.lineTo(x+w,y+rad*.22f);mouth.quadraticTo(x,y+rad*.22f+h*2,x-w,y+rad*.22f);mouth.closeSubPath();
     g.setColour(juce::Colour(0xff802747));g.fillPath(mouth);
     if(t>.22f){g.setColour(juce::Colour(0xfffff0d4));g.fillRoundedRectangle(x-w*.8f,y+rad*.22f,w*1.6f,juce::jmax(5.f,h*.34f),4);}
-    g.setColour(juce::Colour(0xffdedbd6));g.drawArc(getWidth()*.17f,35,getWidth()*.25f,180,juce::MathConstants<float>::pi*1.12f,juce::MathConstants<float>::pi*1.88f,true,5);
+    juce::Path arc;
+    arc.addCentredArc(getWidth() * 0.295f, 125.0f, getWidth() * 0.125f, 90.0f, 0.0f,
+                      juce::MathConstants<float>::pi * 1.12f,
+                      juce::MathConstants<float>::pi * 1.88f, true);
+    g.setColour(juce::Colour(0xffdedbd6));
+    g.strokePath(arc, juce::PathStrokeType(5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 void EndlessSmileInspiredAudioProcessorEditor::resized()
 {
-    auto b=getLocalBounds(); int dial=juce::jmin(220,b.getHeight()*0.43f);
+    auto b=getLocalBounds(); int dial = std::min(220, juce::roundToInt(b.getHeight() * 0.43f));
     intensity.setBounds(b.getCentreX()-dial/2,30,dial,dial+28);
     preset.setBounds(35,b.getHeight()-120,b.getWidth()*.47f,38);
     mix.setBounds(35,b.getHeight()-70,b.getWidth()*.47f,30);
