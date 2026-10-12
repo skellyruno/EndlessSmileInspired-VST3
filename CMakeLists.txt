@@ -15,6 +15,7 @@ juce_add_plugin(EndlessSmileInspired
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE)
+juce_generate_juce_header(EndlessSmileInspired)
 target_sources(EndlessSmileInspired PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
