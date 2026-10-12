@@ -9,16 +9,18 @@ juce_add_plugin(EndlessSmileInspired
     PLUGIN_MANUFACTURER_CODE Skly
     PLUGIN_CODE EsI1
     FORMATS VST3 Standalone
-    PRODUCT_NAME "Endless Smile Inspired"
+    PRODUCT_NAME "EndlessSmileInspired"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE)
-juce_generate_juce_header(EndlessSmileInspired)
 target_sources(EndlessSmileInspired PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
+
+# Generate JuceHeader.h for source files that include <JuceHeader.h>.
+juce_generate_juce_header(EndlessSmileInspired)
 target_compile_features(EndlessSmileInspired PRIVATE cxx_std_17)
 target_compile_definitions(EndlessSmileInspired PUBLIC
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
