@@ -1,0 +1,44 @@
+name: Build plugin artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Windows (VST3 + Standalone)
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package Windows artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+
+          $releaseDir = "build\EndlessSmileInspired_artefacts\Release"
+          $vst3 = "$releaseDir\VST3\EndlessSmileInspired.vst3"
+          Compress-Archive -Path $vst3 -DestinationPath "artifacts\EndlessSmileInspired-Windows-x64-VST3.zip" -Force
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: EndlessSmileInspired-Windows-x64
+          path: artifacts/*
+          if-no-files-found: error
+
+      - name: Attach release assets
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
