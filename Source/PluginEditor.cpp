@@ -3,14 +3,9 @@
 
 namespace
 {
-    const juce::Colour panelGrey  (0xff686667);
-    const juce::Colour frameDark  (0xff29272a);
     const juce::Colour ink        (0xff1d2b30);
     const juce::Colour cyan       (0xff39afd2);
     const juce::Colour pink       (0xfff04491);
-    const juce::Colour pinkShadow (0xff812746);
-    const juce::Colour orange     (0xffff9b2f);
-    const juce::Colour faceMint   (0xffd8f0df);
 
     void strokeRoundedPath (juce::Graphics& g, const juce::Path& path,
                             juce::Colour colour, float thickness)
@@ -32,7 +27,7 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     const float cx = (float) x + (float) width * 0.5f;
     // Keep the dial centre tied to its width so added readout space below
     // the knob does not push the visual dial down as the editor is resized.
-    const float cy = (float) y + (float) width * 0.487f;
+    const float cy = (float) y + (float) width * 0.60f;
     const float radius = side * 0.455f;
     const float start = juce::MathConstants<float>::pi * 0.70f;
     const float end = juce::MathConstants<float>::pi * 2.30f;
@@ -102,24 +97,35 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
 
     // A chunky, angled grip makes the control read as a physical plugin knob,
     // rather than a flat pointer. Its angle tracks the real attached parameter.
-    const float pointerAngle = juce::MathConstants<float>::pi * (0.72f + 1.08f * t);
+    const float pointerAngle = current;
     juce::Path grip;
-    grip.addRoundedRectangle (cx - knobR * 0.10f, cy - knobR * 0.185f,
-                              knobR * 0.99f, knobR * 0.37f, knobR * 0.15f);
+    // Broad asymmetric paddle with clipped corners: the reference knob is a
+    // physical handle, not a thin indicator needle.
+    grip.startNewSubPath (cx - knobR * 0.79f, cy - knobR * 0.34f);
+    grip.lineTo (cx + knobR * 0.43f, cy - knobR * 0.43f);
+    grip.lineTo (cx + knobR * 0.72f, cy - knobR * 0.13f);
+    grip.lineTo (cx + knobR * 0.79f, cy + knobR * 0.12f);
+    grip.lineTo (cx + knobR * 0.52f, cy + knobR * 0.38f);
+    grip.lineTo (cx - knobR * 0.56f, cy + knobR * 0.48f);
+    grip.lineTo (cx - knobR * 0.83f, cy + knobR * 0.18f);
+    grip.closeSubPath();
     grip.applyTransform (juce::AffineTransform::rotation (pointerAngle, cx, cy));
-    g.setColour (juce::Colours::black.withAlpha (0.58f));
-    g.fillPath (grip, juce::AffineTransform::translation (1.5f, 2.0f));
-    juce::ColourGradient gripGradient (juce::Colour (0xff383a3d), cx, cy - knobR * 0.3f,
-                                       juce::Colour (0xff090a0c), cx, cy + knobR * 0.28f, false);
-    gripGradient.addColour (0.43, juce::Colour (0xff17191c));
+    g.setColour (juce::Colours::black.withAlpha (0.62f));
+    g.fillPath (grip, juce::AffineTransform::translation (1.8f, 2.4f));
+    juce::ColourGradient gripGradient (juce::Colour (0xff3a3c40), cx - knobR * 0.3f, cy - knobR * 0.35f,
+                                       juce::Colour (0xff050607), cx + knobR * 0.22f, cy + knobR * 0.45f, false);
+    gripGradient.addColour (0.28, juce::Colour (0xff242629));
+    gripGradient.addColour (0.51, juce::Colour (0xff111315));
     g.setGradientFill (gripGradient);
     g.fillPath (grip);
+    g.setColour (juce::Colour (0xff6b6c70).withAlpha (0.88f));
+    g.strokePath (grip, juce::PathStrokeType (0.8f));
 
     juce::Path gripGlint;
-    gripGlint.startNewSubPath (cx + knobR * 0.02f, cy - knobR * 0.07f);
-    gripGlint.lineTo (cx + knobR * 0.77f, cy - knobR * 0.07f);
+    gripGlint.startNewSubPath (cx - knobR * 0.49f, cy - knobR * 0.05f);
+    gripGlint.lineTo (cx + knobR * 0.44f, cy - knobR * 0.05f);
     gripGlint.applyTransform (juce::AffineTransform::rotation (pointerAngle, cx, cy));
-    strokeRoundedPath (g, gripGlint, juce::Colours::white.withAlpha (0.52f), 1.5f);
+    strokeRoundedPath (g, gripGlint, juce::Colours::white.withAlpha (0.56f), 1.9f);
     g.setColour (juce::Colour (0xffa5a8ab).withAlpha (0.92f));
     g.fillEllipse (cx - 2.8f, cy - 2.8f, 5.6f, 5.6f);
 
@@ -148,37 +154,114 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
 void EndlessSmileInspiredLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
     bool isButtonDown, int buttonX, int buttonY, int buttonW, int buttonH, juce::ComboBox& box)
 {
-    juce::ignoreUnused (isButtonDown, buttonX, buttonY, buttonW, buttonH, box);
-    const auto r = juce::Rectangle<float> (0.5f, 0.5f, (float) width - 1.0f, (float) height - 1.0f);
+    juce::ignoreUnused (isButtonDown, buttonX, buttonY, buttonW, buttonH);
     const int selected = box.getSelectedId();
-    const juce::Colour categoryAccent = selected <= 2 ? juce::Colour (0xffffa13b)
-        : (selected <= 4 ? juce::Colour (0xff43b7d5)
-        : (selected <= 6 ? juce::Colour (0xfff04491) : juce::Colour (0xffe7d6d8)));
+    const juce::String category = selected <= 2 ? "SOFT"
+        : (selected <= 4 ? "MEDIUM" : (selected <= 6 ? "HARD" : "EXTREME"));
+    const juce::Colour tabColour = selected <= 2 ? juce::Colour (0xffffa13b)
+        : (selected <= 4 ? juce::Colour (0xff46b8d5)
+        : (selected <= 6 ? juce::Colour (0xfff04491) : juce::Colour (0xffd84986)));
 
-    g.setColour (juce::Colour (0xff1d2b30));
-    g.fillRoundedRectangle (r, 5.0f);
-    g.setColour (juce::Colour (0xff101a1e).withAlpha (0.66f));
-    g.drawRoundedRectangle (r.reduced (0.8f), 5.0f, 1.0f);
-    // Slim preset-family marker and matching outline make each category legible.
-    g.setColour (categoryAccent);
-    g.fillRoundedRectangle (2.0f, 5.0f, 4.0f, (float) height - 10.0f, 2.0f);
-    g.setColour (categoryAccent.withAlpha (0.60f));
-    g.drawRoundedRectangle (r, 5.0f, 1.1f);
+    // Cast-metal pink housing and lower shadow.
+    g.setColour (juce::Colours::black.withAlpha (0.34f));
+    g.fillRoundedRectangle (3.0f, 4.0f, (float) width - 6.0f, (float) height - 5.0f, 5.0f);
+    juce::ColourGradient casing (juce::Colour (0xffff79aa), 0.0f, 0.0f,
+                                  juce::Colour (0xffbd3c70), (float) width, (float) height, false);
+    casing.addColour (0.42, juce::Colour (0xffed4c8e));
+    g.setGradientFill (casing);
+    g.fillRoundedRectangle (1.0f, 0.5f, (float) width - 4.0f, (float) height - 7.0f, 5.5f);
+    g.setColour (juce::Colour (0xffffb2cd).withAlpha (0.82f));
+    g.drawRoundedRectangle (1.5f, 1.0f, (float) width - 5.0f, (float) height - 8.0f, 5.0f, 1.0f);
+    g.setColour (juce::Colour (0xff8c244e).withAlpha (0.85f));
+    g.drawRoundedRectangle (4.0f, 3.5f, (float) width - 10.0f, (float) height - 13.0f, 3.0f, 1.0f);
 
-    const float arrowCX = width - 24.0f;
-    const float arrowCY = height * 0.5f;
+    // Cream paper window, gently inset into the casing.
+    juce::ColourGradient paper (juce::Colour (0xfffffdf1), 8.0f, 21.0f,
+                                 juce::Colour (0xffe3ddd2), (float) width - 12.0f, (float) height, false);
+    paper.addColour (0.52, juce::Colour (0xfff5f0e7));
+    g.setGradientFill (paper);
+    g.fillRoundedRectangle (9.0f, 22.0f, (float) width - 20.0f, (float) height - 31.0f, 3.0f);
+    g.setColour (juce::Colour (0xff9c8e8c).withAlpha (0.80f));
+    g.drawRoundedRectangle (9.0f, 22.0f, (float) width - 20.0f, (float) height - 31.0f, 3.0f, 0.8f);
+
+    // The category is a separate tab, like the original labelled preset cassette.
+    const float tabWidth = category == "EXTREME" ? 79.0f : (category == "MEDIUM" ? 72.0f : 56.0f);
+    g.setColour (juce::Colour (0xff9b2d59).withAlpha (0.55f));
+    g.fillRoundedRectangle (14.5f, 4.5f, tabWidth + 2.0f, 16.5f, 1.5f);
+    g.setColour (tabColour);
+    g.fillRoundedRectangle (13.0f, 3.0f, tabWidth, 16.0f, 1.5f);
+    g.setColour (juce::Colour (0xff402432));
+    g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
+    g.drawText (category, juce::Rectangle<int> (15, 3, (int) tabWidth - 4, 16), juce::Justification::centred);
+
+    // Rivets and an understated down-chevron remain clear at small sizes.
+    for (const float sx : { 7.0f, (float) width - 9.0f })
+    {
+        g.setColour (juce::Colour (0xff8a244a));
+        g.fillEllipse (sx - 1.7f, (float) height * 0.53f - 1.7f, 3.4f, 3.4f);
+        g.setColour (juce::Colour (0xffffd1e1));
+        g.fillEllipse (sx - 0.7f, (float) height * 0.53f - 1.1f, 1.3f, 1.3f);
+    }
+    const float arrowCX = (float) width - 25.0f;
+    const float arrowCY = (float) height * 0.66f;
     juce::Path arrow;
-    arrow.startNewSubPath (arrowCX - 7.0f, arrowCY - 2.0f);
-    arrow.lineTo (arrowCX, arrowCY + 4.0f);
-    arrow.lineTo (arrowCX + 7.0f, arrowCY - 2.0f);
-    strokeRoundedPath (g, arrow, juce::Colour (0xffe5e8e8), 2.0f);
+    arrow.startNewSubPath (arrowCX - 6.0f, arrowCY - 2.0f);
+    arrow.lineTo (arrowCX, arrowCY + 3.5f);
+    arrow.lineTo (arrowCX + 6.0f, arrowCY - 2.0f);
+    strokeRoundedPath (g, arrow, juce::Colour (0xff342630), 2.4f);
 }
 
 void EndlessSmileInspiredLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
 {
-    label.setBounds (14, 1, juce::jmax (1, box.getWidth() - 48), juce::jmax (1, box.getHeight() - 2));
+    label.setBounds (18, 25, juce::jmax (1, box.getWidth() - 58), juce::jmax (1, box.getHeight() - 34));
     label.setJustificationType (juce::Justification::centredLeft);
-    label.setFont (juce::Font (juce::FontOptions (14.5f, juce::Font::bold)));
+    label.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::italic)));
+}
+
+void EndlessSmileInspiredLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
+    const juce::Colour& backgroundColour, bool highlighted, bool down)
+{
+    juce::ignoreUnused (backgroundColour);
+    const auto b = button.getLocalBounds().toFloat();
+    const bool previous = button.getName() == "preset-previous";
+    const float midY = b.getCentreY();
+    const float inset = 5.0f;
+    juce::Path arrow;
+    if (previous)
+    {
+        arrow.startNewSubPath (inset, midY);
+        arrow.lineTo (b.getWidth() * 0.44f, midY - b.getHeight() * 0.35f);
+        arrow.lineTo (b.getWidth() * 0.44f, midY - b.getHeight() * 0.16f);
+        arrow.lineTo (b.getWidth() - inset, midY - b.getHeight() * 0.16f);
+        arrow.lineTo (b.getWidth() - inset, midY + b.getHeight() * 0.16f);
+        arrow.lineTo (b.getWidth() * 0.44f, midY + b.getHeight() * 0.16f);
+        arrow.lineTo (b.getWidth() * 0.44f, midY + b.getHeight() * 0.35f);
+    }
+    else
+    {
+        arrow.startNewSubPath (b.getWidth() - inset, midY);
+        arrow.lineTo (b.getWidth() * 0.56f, midY - b.getHeight() * 0.35f);
+        arrow.lineTo (b.getWidth() * 0.56f, midY - b.getHeight() * 0.16f);
+        arrow.lineTo (inset, midY - b.getHeight() * 0.16f);
+        arrow.lineTo (inset, midY + b.getHeight() * 0.16f);
+        arrow.lineTo (b.getWidth() * 0.56f, midY + b.getHeight() * 0.16f);
+        arrow.lineTo (b.getWidth() * 0.56f, midY + b.getHeight() * 0.35f);
+    }
+    arrow.closeSubPath();
+    g.setColour (juce::Colours::black.withAlpha (0.32f));
+    g.fillPath (arrow, juce::AffineTransform::translation (1.0f, 2.0f));
+    g.setColour (down ? juce::Colour (0xffd85b8b)
+                      : (highlighted ? juce::Colour (0xffffbd54) : juce::Colour (0xffff9b2f)));
+    g.fillPath (arrow);
+    g.setColour (juce::Colour (0xffffd17d).withAlpha (0.90f));
+    g.strokePath (arrow, juce::PathStrokeType (1.1f));
+}
+
+void EndlessSmileInspiredLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
+    bool isMouseOverButton, bool isButtonDown)
+{
+    juce::ignoreUnused (g, button, isMouseOverButton, isButtonDown);
+    // The buttons intentionally use custom arrow silhouettes instead of text glyphs.
 }
 
 EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEditor
@@ -202,22 +285,44 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
 
     // ASCII separators avoid mojibake in MSVC builds with inconsistent source encodings.
     const juce::StringArray presetNames {
-        "SOFT  |  FIST IN THE AIR",
-        "SOFT  |  HELIUM JUMPING",
-        "MEDIUM  |  NO LIMIT",
-        "MEDIUM  |  FACE MELTING JOY",
-        "HARD  |  SMACK YOU IN THE FACE",
-        "HARD  |  BROKEN TEETH",
-        "EXTREME  |  DADA DYNAMITE"
+        "FIST IN THE AIR",
+        "HELIUM JUMPING",
+        "NO LIMIT",
+        "FACE MELTING JOY",
+        "SMACK YOU IN THE FACE",
+        "BROKEN TEETH",
+        "DADA DYNAMITE"
     };
     for (int i = 0; i < presetNames.size(); ++i)
         preset.addItem (presetNames[i], i + 1);
     preset.setJustificationType (juce::Justification::centredLeft);
-    preset.setColour (juce::ComboBox::backgroundColourId, ink);
-    preset.setColour (juce::ComboBox::textColourId, juce::Colours::white);
-    preset.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xff829094));
-    preset.setColour (juce::ComboBox::arrowColourId, juce::Colours::white);
+    preset.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffed4c8e));
+    preset.setColour (juce::ComboBox::textColourId, juce::Colour (0xff30252b));
+    preset.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xff9f2e59));
+    preset.setColour (juce::ComboBox::arrowColourId, juce::Colour (0xff30252b));
     addAndMakeVisible (preset);
+
+    previousPresetButton.setName ("preset-previous");
+    previousPresetButton.setButtonText ("");
+    previousPresetButton.setTooltip ("Previous preset");
+    previousPresetButton.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    previousPresetButton.onClick = [this]
+    {
+        const int id = preset.getSelectedId();
+        preset.setSelectedId (id <= 1 ? 7 : id - 1, juce::sendNotificationSync);
+    };
+    addAndMakeVisible (previousPresetButton);
+
+    nextPresetButton.setName ("preset-next");
+    nextPresetButton.setButtonText ("");
+    nextPresetButton.setTooltip ("Next preset");
+    nextPresetButton.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    nextPresetButton.onClick = [this]
+    {
+        const int id = preset.getSelectedId();
+        preset.setSelectedId (id >= 7 ? 1 : id + 1, juce::sendNotificationSync);
+    };
+    addAndMakeVisible (nextPresetButton);
 
     mix.setSliderStyle (juce::Slider::LinearHorizontal);
     mix.setTextBoxStyle (juce::Slider::TextBoxRight, false, 64, 24);
@@ -280,11 +385,11 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
 
     // The character is drawn behind the real JUCE intensity slider. This keeps
     // arms behind the dial and gives the whole mascot a consistent silhouette.
-    const float faceR = juce::jmin (w * 0.151f, h * 0.267f);
+    const float faceR = juce::jmin (w * 0.134f, h * 0.228f);
     const float bounceX = std::sin (animationPhase * 0.83f) * faceR * 0.010f * ease;
     const float bounceY = std::cos (animationPhase * 1.17f) * faceR * 0.012f * ease;
-    const float faceCX = w * 0.748f + bounceX;
-    const float faceCY = h * juce::jmap (ease, 0.485f, 0.462f) + bounceY;
+    const float faceCX = w * 0.758f + bounceX;
+    const float faceCY = h * juce::jmap (ease, 0.535f, 0.515f) + bounceY;
     const float torsoTop = faceCY + faceR * (0.70f - 0.025f * ease);
     const float torsoBottom = h * (0.795f + 0.037f * ease);
     const float legBottom = h * (0.888f + 0.018f * ease);
@@ -338,16 +443,16 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
 
     // Rounded, tapered spring torso, with a shoulder collar and four ribbed bands.
     juce::Path torso;
-    torso.startNewSubPath (faceCX - faceR * 0.34f, torsoTop);
-    torso.cubicTo (faceCX - faceR * 0.44f, torsoTop + faceR * 0.18f,
-                   faceCX - faceR * 0.32f, torsoBottom - faceR * 0.16f,
-                   faceCX - faceR * 0.25f, torsoBottom);
+    torso.startNewSubPath (faceCX - faceR * 0.39f, torsoTop);
+    torso.cubicTo (faceCX - faceR * 0.50f, torsoTop + faceR * 0.18f,
+                   faceCX - faceR * 0.43f, torsoBottom - faceR * 0.16f,
+                   faceCX - faceR * 0.34f, torsoBottom);
     torso.cubicTo (faceCX - faceR * 0.14f, torsoBottom + 2.0f,
                    faceCX + faceR * 0.14f, torsoBottom + 2.0f,
-                   faceCX + faceR * 0.25f, torsoBottom);
-    torso.cubicTo (faceCX + faceR * 0.32f, torsoBottom - faceR * 0.16f,
-                   faceCX + faceR * 0.44f, torsoTop + faceR * 0.18f,
-                   faceCX + faceR * 0.34f, torsoTop);
+                   faceCX + faceR * 0.34f, torsoBottom);
+    torso.cubicTo (faceCX + faceR * 0.43f, torsoBottom - faceR * 0.16f,
+                   faceCX + faceR * 0.50f, torsoTop + faceR * 0.18f,
+                   faceCX + faceR * 0.39f, torsoTop);
     torso.closeSubPath();
     g.setColour (juce::Colours::black.withAlpha (0.18f));
     g.fillPath (torso, juce::AffineTransform::translation (2.0f, 3.0f));
@@ -359,9 +464,9 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
 
     // A thick collar separates the head from the ribbed spring body.
     juce::Path collar;
-    collar.startNewSubPath (faceCX - faceR * 0.34f, torsoTop + faceR * 0.025f);
+    collar.startNewSubPath (faceCX - faceR * 0.39f, torsoTop + faceR * 0.025f);
     collar.quadraticTo (faceCX, torsoTop + faceR * 0.13f,
-                        faceCX + faceR * 0.34f, torsoTop + faceR * 0.025f);
+                        faceCX + faceR * 0.39f, torsoTop + faceR * 0.025f);
     strokeRoundedPath (g, collar, juce::Colour (0xff9b2d58), 5.0f);
     strokeRoundedPath (g, collar, juce::Colour (0xffff8fba).withAlpha (0.75f), 2.0f);
 
@@ -369,7 +474,7 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     {
         const float u = 0.20f + (float) band * 0.19f;
         const float y = torsoTop + (torsoBottom - torsoTop) * u;
-        const float halfW = faceR * (0.31f - (float) band * 0.018f);
+        const float halfW = faceR * (0.38f - (float) band * 0.020f);
         juce::Path seam;
         seam.startNewSubPath (faceCX - halfW, y);
         seam.cubicTo (faceCX - halfW * 0.42f, y + faceR * 0.065f,
@@ -387,9 +492,10 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     const float rightShoulderX = faceCX + faceR * 0.67f;
     // Keep hands just outside the head silhouette even in the slumped pose;
     // otherwise the head drawn later would completely hide them.
-    const float handSpread = 1.10f + 0.08f * ease;
-    const float leftHandX = faceCX - faceR * handSpread;
-    const float rightHandX = faceCX + faceR * handSpread;
+    const float handSpread = 1.10f + 0.10f * ease;
+    const float armSway = std::sin (animationPhase * 1.65f) * faceR * 0.025f * ease;
+    const float leftHandX = faceCX - faceR * handSpread - armSway;
+    const float rightHandX = faceCX + faceR * handSpread + armSway;
     const float armControlY1 = faceCY + faceR * (0.76f - 0.49f * ease);
     const float armControlY2 = handY + faceR * (-0.015f + 0.69f * ease);
 
@@ -450,6 +556,35 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillEllipse (faceCX - faceR * 1.03f, faceCY - faceR * 1.03f,
                    faceR * 2.06f, faceR * 2.06f);
 
+    // Layer a few swept orange tufts into the top rim, giving the silhouette
+    // more of the animated orange-haired mascot look instead of a flat ring.
+    for (int tuft = 0; tuft < 7; ++tuft)
+    {
+        const float a = juce::MathConstants<float>::pi * (1.18f + 0.107f * (float) tuft);
+        const float nextA = a + 0.11f;
+        const float tipA = a + 0.055f;
+        juce::Path hair;
+        hair.startNewSubPath (faceCX + std::cos (a) * faceR * 0.91f,
+                              faceCY + std::sin (a) * faceR * 0.91f);
+        hair.cubicTo (faceCX + std::cos (a) * faceR * 1.01f,
+                      faceCY + std::sin (a) * faceR * 1.01f,
+                      faceCX + std::cos (tipA) * faceR * 1.09f,
+                      faceCY + std::sin (tipA) * faceR * 1.09f,
+                      faceCX + std::cos (tipA) * faceR * 1.09f,
+                      faceCY + std::sin (tipA) * faceR * 1.09f);
+        hair.cubicTo (faceCX + std::cos (nextA) * faceR * 1.03f,
+                      faceCY + std::sin (nextA) * faceR * 1.03f,
+                      faceCX + std::cos (nextA) * faceR * 0.95f,
+                      faceCY + std::sin (nextA) * faceR * 0.95f,
+                      faceCX + std::cos (nextA) * faceR * 0.91f,
+                      faceCY + std::sin (nextA) * faceR * 0.91f);
+        hair.closeSubPath();
+        g.setColour (tuft % 2 == 0 ? juce::Colour (0xffffad36) : juce::Colour (0xffff9628));
+        g.fillPath (hair);
+        g.setColour (juce::Colour (0xffffd078).withAlpha (0.60f));
+        g.strokePath (hair, juce::PathStrokeType (0.9f));
+    }
+
     // Orange shell specular strokes, not a perfectly flat circle.
     juce::Path shellGlint;
     shellGlint.startNewSubPath (faceCX - faceR * 0.73f, faceCY - faceR * 0.78f);
@@ -487,14 +622,26 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         brow.quadraticTo (ex + eyeW * 0.50f, eyeY - faceR * (0.075f + 0.075f * ease),
                           ex + eyeW * 1.02f, eyeY - faceR * (0.025f + 0.035f * ease));
         strokeRoundedPath (g, brow, juce::Colour (0xffb84a6f).withAlpha (0.48f), 2.0f);
-        g.setColour (juce::Colour (0xff7c2447).withAlpha (0.55f));
-        g.fillEllipse (ex - 1.0f, eyeY + 1.0f, eyeW + 2.0f, eyeH + 1.0f);
+        const float eyeCX = ex + eyeW * 0.5f;
+        const float eyeCY = eyeY + eyeH * 0.5f;
+        const float eyeTilt = (float) side * (0.025f + 0.17f * ease);
+        juce::Path eyeSocket;
+        eyeSocket.addEllipse (ex - eyeW * 0.10f, eyeY - eyeH * 0.025f,
+                              eyeW * 1.20f, eyeH * 1.05f);
+        eyeSocket.applyTransform (juce::AffineTransform::rotation (eyeTilt, eyeCX, eyeCY));
+        g.setColour (juce::Colour (0xfff6e9dd).withAlpha (0.92f));
+        g.fillPath (eyeSocket);
+        juce::Path eye;
+        eye.addEllipse (ex, eyeY, eyeW, eyeH);
+        eye.applyTransform (juce::AffineTransform::rotation (eyeTilt, eyeCX, eyeCY));
+        g.setColour (juce::Colour (0xff7c2447).withAlpha (0.58f));
+        g.fillPath (eye, juce::AffineTransform::translation (0.0f, 1.5f));
         g.setColour (juce::Colour (0xffa42f59));
-        g.fillEllipse (ex, eyeY, eyeW, eyeH);
-        g.setColour (juce::Colour (0xffffd1df).withAlpha (0.82f));
-        g.fillEllipse (ex + eyeW * 0.20f, eyeY + eyeH * 0.12f,
-                       eyeW * 0.22f, eyeH * 0.17f);
-        g.setColour (juce::Colours::white.withAlpha (0.30f));
+        g.fillPath (eye);
+        g.setColour (juce::Colour (0xffffd1df).withAlpha (0.88f));
+        g.fillEllipse (ex + eyeW * 0.18f, eyeY + eyeH * 0.11f,
+                       eyeW * 0.24f, eyeH * 0.18f);
+        g.setColour (juce::Colours::white.withAlpha (0.36f));
         g.fillEllipse (ex + eyeW * 0.62f, eyeY + eyeH * 0.58f,
                        eyeW * 0.09f, eyeH * 0.08f);
 
@@ -532,9 +679,9 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
                 faceCX + faceR * 0.67f, faceCY + faceR * 0.18f, 1.0f);
 
     // Tall glossy capsule nose, intentionally narrower than the eye spacing.
-    const float noseTop = faceCY - faceR * 0.28f;
-    const float noseBottom = faceCY + faceR * 0.085f;
-    const float noseHalfWidth = faceR * (0.105f + 0.012f * t);
+    const float noseTop = faceCY - faceR * (0.32f + 0.035f * ease);
+    const float noseBottom = faceCY + faceR * (0.12f + 0.035f * ease);
+    const float noseHalfWidth = faceR * (0.12f + 0.020f * ease);
     juce::Path nose;
     nose.startNewSubPath (faceCX - noseHalfWidth * 0.52f, noseTop + faceR * 0.015f);
     nose.cubicTo (faceCX - noseHalfWidth * 1.06f, noseTop + faceR * 0.10f,
@@ -628,26 +775,54 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         strokeRoundedPath (g, upperLip, pink, faceR * 0.060f);
         strokeRoundedPath (g, upperLip, juce::Colour (0xffffb6d2).withAlpha (0.76f), 1.3f);
 
-        // Six connected-looking upper teeth follow the smile arc, not a flat line.
-        const int upperToothCount = 8;
-        const float upperToothW = mouthHalfWidth * 0.205f;
-        const float upperToothH = juce::jmax (4.0f, faceR * (0.030f + 0.064f * openT));
-        for (int tooth = 0; tooth < upperToothCount; ++tooth)
+        // Continuous enamel strip follows the upper lip. Fine seams suggest
+        // separate rounded teeth without making them look like floating tiles.
+        const float upperToothH = juce::jmax (4.0f, faceR * (0.040f + 0.066f * openT));
+        const auto upperToothTop = [&] (float nx)
         {
-            const float nx = ((float) tooth - ((float) upperToothCount - 1.0f) * 0.5f) / (((float) upperToothCount - 1.0f) * 0.5f);
-            const float tx = faceCX + nx * mouthHalfWidth * 0.79f;
-            const float curve = 1.0f - nx * nx;
-            const float ty = mouthTopY + topCurveDepth * (0.72f * curve + 0.08f) + 1.5f;
-            const float toothW = upperToothW * (1.0f - 0.08f * std::abs (nx));
-            g.setColour (juce::Colour (0xff52182e).withAlpha (0.42f));
-            g.fillRoundedRectangle (tx - toothW * 0.5f + 0.5f, ty + 1.0f,
-                                    toothW, upperToothH, 2.5f);
-            g.setColour (juce::Colour (0xffffe9e0));
-            g.fillRoundedRectangle (tx - toothW * 0.5f, ty,
-                                    toothW, upperToothH, 2.5f);
-            g.setColour (juce::Colours::white.withAlpha (0.65f));
-            g.drawLine (tx - toothW * 0.26f, ty + 1.1f,
-                        tx + toothW * 0.19f, ty + 1.1f, 0.7f);
+            return mouthTopY + topCurveDepth * (0.72f * (1.0f - nx * nx) + 0.08f) + 1.2f;
+        };
+        const auto upperToothHeight = [&] (float nx)
+        {
+            return upperToothH * (0.88f + 0.12f * (1.0f - std::abs (nx)));
+        };
+        juce::Path teethBand;
+        constexpr int toothCurveSteps = 24;
+        for (int step = 0; step <= toothCurveSteps; ++step)
+        {
+            const float nx = juce::jmap ((float) step / (float) toothCurveSteps, -0.80f, 0.80f);
+            const float px = faceCX + nx * mouthHalfWidth;
+            const float py = upperToothTop (nx);
+            if (step == 0) teethBand.startNewSubPath (px, py);
+            else teethBand.lineTo (px, py);
+        }
+        for (int step = toothCurveSteps; step >= 0; --step)
+        {
+            const float nx = juce::jmap ((float) step / (float) toothCurveSteps, -0.80f, 0.80f);
+            teethBand.lineTo (faceCX + nx * mouthHalfWidth,
+                              upperToothTop (nx) + upperToothHeight (nx));
+        }
+        teethBand.closeSubPath();
+        g.setColour (juce::Colour (0xff4b172b).withAlpha (0.45f));
+        g.fillPath (teethBand, juce::AffineTransform::translation (0.5f, 1.3f));
+        g.setColour (juce::Colour (0xffffe9df));
+        g.fillPath (teethBand);
+        g.setColour (juce::Colours::white.withAlpha (0.52f));
+        juce::Path toothHighlight;
+        toothHighlight.startNewSubPath (faceCX - mouthHalfWidth * 0.78f, upperToothTop (-0.78f) + 1.0f);
+        for (int step = 1; step <= toothCurveSteps; ++step)
+        {
+            const float nx = juce::jmap ((float) step / (float) toothCurveSteps, -0.78f, 0.78f);
+            toothHighlight.lineTo (faceCX + nx * mouthHalfWidth, upperToothTop (nx) + 1.0f);
+        }
+        strokeRoundedPath (g, toothHighlight, juce::Colour (0xffffffff).withAlpha (0.58f), 1.0f);
+        g.setColour (juce::Colour (0xffa45c69).withAlpha (0.64f));
+        for (int seam = 1; seam < 8; ++seam)
+        {
+            const float nx = juce::jmap ((float) seam / 8.0f, -0.80f, 0.80f);
+            const float sx = faceCX + nx * mouthHalfWidth;
+            const float sy = upperToothTop (nx) + upperToothHeight (nx) * 0.80f;
+            g.drawLine (sx, upperToothTop (nx) + 1.5f, sx, sy, 1.0f);
         }
 
         // Six small lower teeth frame the tongue without becoming detached tiles.
@@ -659,7 +834,7 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
             const int localTooth = tooth % 3;
             const float position = localTooth == 0 ? 0.76f : (localTooth == 1 ? 0.59f : 0.42f);
             const float tx = faceCX + side * mouthHalfWidth * position;
-            const float ty = mouthTopY + mouthDepth * (0.78f - 0.025f * position);
+            const float ty = mouthTopY + mouthDepth * (0.86f - 0.025f * position);
             g.setColour (juce::Colour (0xff4c172d).withAlpha (0.40f));
             g.fillRoundedRectangle (tx - lowerToothW * 0.5f + 0.5f, ty + 0.7f,
                                     lowerToothW, lowerToothH, 2.0f);
@@ -680,27 +855,35 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         }
     }
 
-    // Tiny footer remains clear of the character shoes.
+    // Branded footer inspired by the original product-title strip while keeping
+    // this clean-room build identified as the Inspired edition.
+    g.setColour (juce::Colour (0xffe7e2dd).withAlpha (0.82f));
+    g.setFont (juce::Font (juce::FontOptions (27.0f, juce::Font::bold)));
+    g.drawText ("ENDLESS SMILE INSPIRED", 20, getHeight() - 57,
+                juce::roundToInt (w * 0.56f), 34, juce::Justification::centredLeft,
+                true);
     g.setColour (juce::Colour (0xffddd8d0).withAlpha (0.86f));
     g.setFont (juce::Font (juce::FontOptions (9.5f, juce::Font::bold)));
     g.drawText ("SKELLY AUDIO  |  BUILD-UP / TRANSITION EFFECT",
-                20, getHeight() - 24, getWidth() - 40, 14, juce::Justification::centredLeft);
+                20, getHeight() - 23, getWidth() - 40, 12, juce::Justification::centredLeft);
 }
 
 void EndlessSmileInspiredAudioProcessorEditor::resized()
 {
     const auto bounds = getLocalBounds();
-    const int dialWidth = juce::jmin (310, juce::roundToInt ((float) bounds.getHeight() * 0.44f));
+    const int dialWidth = juce::jmin (280, juce::roundToInt ((float) bounds.getHeight() * 0.40f));
     const int dialHeight = dialWidth + 50;
-    const int dialX = juce::roundToInt ((float) bounds.getWidth() * 0.47f) - dialWidth / 2;
-    const int dialY = juce::roundToInt ((float) bounds.getHeight() * 0.06f);
+    const int dialX = juce::roundToInt ((float) bounds.getWidth() * 0.39f) - dialWidth / 2;
+    const int dialY = juce::roundToInt ((float) bounds.getHeight() * 0.055f);
     intensity.setBounds (dialX, dialY, dialWidth, dialHeight);
 
     const int leftMargin = juce::roundToInt ((float) bounds.getWidth() * 0.044f);
-    const int controlWidth = juce::jmin (660, juce::roundToInt ((float) bounds.getWidth() * 0.49f));
-    const int presetY = juce::roundToInt ((float) bounds.getHeight() * 0.765f);
-    preset.setBounds (leftMargin, presetY, controlWidth, 40);
-    mix.setBounds (leftMargin + 10, presetY + 46, controlWidth - 22, 30);
+    const int controlWidth = juce::jmin (620, juce::roundToInt ((float) bounds.getWidth() * 0.37f));
+    const int presetY = juce::roundToInt ((float) bounds.getHeight() * 0.66f);
+    preset.setBounds (leftMargin + 44, presetY + 1, controlWidth - 88, 68);
+    previousPresetButton.setBounds (leftMargin - 12, presetY + 14, 56, 42);
+    nextPresetButton.setBounds (leftMargin + controlWidth - 44, presetY + 14, 56, 42);
+    mix.setBounds (leftMargin + 28, presetY + 75, controlWidth - 54, 30);
 }
 
 void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
