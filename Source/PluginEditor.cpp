@@ -266,48 +266,79 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     const float faceCY = h * 0.465f;
     const float faceR = juce::jmin (w * 0.155f, h * 0.275f);
 
-    const float armRaise = 0.08f + 0.24f * t;
-    const float armOuter = 1.04f + 0.09f * t;
-    const float armStartY = faceCY - faceR * 0.43f;
-    const float handY = faceCY - faceR * (0.95f + armRaise);
-    const float leftStartX = faceCX - faceR * 0.76f;
-    const float rightStartX = faceCX + faceR * 0.76f;
-    const float leftHandX = faceCX - faceR * armOuter;
-    const float rightHandX = faceCX + faceR * armOuter;
+    // Small segmented torso peeks out below the head, like a spring-loaded toy.
+    // Draw it first so the face naturally overlaps the top of the neck.
+    const float torsoTop = faceCY + faceR * 0.62f;
+    const float torsoBottom = h * 0.925f;
+    juce::Path torso;
+    torso.startNewSubPath (faceCX - faceR * 0.43f, torsoTop);
+    torso.cubicTo (faceCX - faceR * 0.48f, torsoTop + faceR * 0.28f,
+                   faceCX - faceR * 0.35f, torsoBottom - faceR * 0.20f,
+                   faceCX - faceR * 0.29f, torsoBottom);
+    torso.lineTo (faceCX + faceR * 0.29f, torsoBottom);
+    torso.cubicTo (faceCX + faceR * 0.35f, torsoBottom - faceR * 0.20f,
+                   faceCX + faceR * 0.48f, torsoTop + faceR * 0.28f,
+                   faceCX + faceR * 0.43f, torsoTop);
+    torso.closeSubPath();
+    juce::ColourGradient torsoGradient (juce::Colour (0xffff73a9), faceCX - faceR * 0.3f, torsoTop,
+                                        juce::Colour (0xffce3672), faceCX + faceR * 0.35f, torsoBottom, false);
+    g.setGradientFill (torsoGradient);
+    g.fillPath (torso);
+    g.setColour (juce::Colour (0xff842746).withAlpha (0.65f));
+    for (int band = 0; band < 4; ++band)
+    {
+        const float y = torsoTop + faceR * (0.22f + (float) band * 0.22f);
+        juce::Path seam;
+        seam.startNewSubPath (faceCX - faceR * (0.39f - (float) band * 0.025f), y);
+        seam.quadraticTo (faceCX, y + faceR * 0.075f,
+                          faceCX + faceR * (0.39f - (float) band * 0.025f), y);
+        strokeRoundedPath (g, seam, juce::Colour (0xff9e2d5b).withAlpha (0.75f), 1.3f);
+        strokeRoundedPath (g, seam, juce::Colour (0xffffa0bf).withAlpha (0.58f), 0.8f);
+    }
 
-    // Arms are drawn behind the head, with a darker undershadow and rounded joints.
+    // Raised arms now arc up from behind the head instead of stopping at its temples.
+    // Their height responds gently to intensity while hands remain visible at every setting.
+    const float handY = h * (0.145f - 0.075f * t);
+    const float leftShoulderX = faceCX - faceR * 0.66f;
+    const float rightShoulderX = faceCX + faceR * 0.66f;
+    const float shoulderY = faceCY + faceR * 0.51f;
+    const float leftHandX = faceCX - faceR * 1.16f;
+    const float rightHandX = faceCX + faceR * 1.16f;
+
     juce::Path leftArm;
-    leftArm.startNewSubPath (leftStartX, armStartY);
-    leftArm.cubicTo (leftStartX - faceR * 0.28f, armStartY - faceR * 0.20f,
-                     leftHandX - faceR * 0.20f, handY + faceR * 0.45f,
+    leftArm.startNewSubPath (leftShoulderX, shoulderY);
+    leftArm.cubicTo (faceCX - faceR * 1.02f, faceCY + faceR * 0.42f,
+                     leftHandX - faceR * 0.20f, handY + faceR * 0.70f,
                      leftHandX, handY);
     juce::Path rightArm;
-    rightArm.startNewSubPath (rightStartX, armStartY);
-    rightArm.cubicTo (rightStartX + faceR * 0.28f, armStartY - faceR * 0.20f,
-                      rightHandX + faceR * 0.20f, handY + faceR * 0.45f,
+    rightArm.startNewSubPath (rightShoulderX, shoulderY);
+    rightArm.cubicTo (faceCX + faceR * 1.02f, faceCY + faceR * 0.42f,
+                      rightHandX + faceR * 0.20f, handY + faceR * 0.70f,
                       rightHandX, handY);
-    strokeRoundedPath (g, leftArm, juce::Colour (0xff812746), 9.0f);
-    strokeRoundedPath (g, rightArm, juce::Colour (0xff812746), 9.0f);
-    strokeRoundedPath (g, leftArm, juce::Colour (0xfff04491), 6.1f);
-    strokeRoundedPath (g, rightArm, juce::Colour (0xfff04491), 6.1f);
+    strokeRoundedPath (g, leftArm, juce::Colour (0xff812746), 10.5f);
+    strokeRoundedPath (g, rightArm, juce::Colour (0xff812746), 10.5f);
+    strokeRoundedPath (g, leftArm, juce::Colour (0xfff04491), 7.4f);
+    strokeRoundedPath (g, rightArm, juce::Colour (0xfff04491), 7.4f);
+    strokeRoundedPath (g, leftArm, juce::Colour (0xffff9cc6).withAlpha (0.62f), 1.2f);
+    strokeRoundedPath (g, rightArm, juce::Colour (0xffff9cc6).withAlpha (0.62f), 1.2f);
 
-    if (t > 0.38f)
+    // Simple mint hands and separated fingers; not intensity-gated so the character never loses its hands.
+    const float handW = juce::jmax (8.0f, faceR * 0.075f);
+    const float handH = juce::jmax (11.0f, faceR * 0.105f);
+    for (int side = 0; side < 2; ++side)
     {
-        // Tiny raised hands and three finger marks become more visible at high energy.
-        const float handRadius = 4.2f + 1.0f * t;
+        const float hx = side == 0 ? leftHandX : rightHandX;
         g.setColour (juce::Colour (0xffd8f0df));
-        g.fillRoundedRectangle (leftHandX - handRadius * 0.62f, handY - handRadius * 1.1f,
-                                handRadius * 1.25f, handRadius * 2.0f, 2.0f);
-        g.fillRoundedRectangle (rightHandX - handRadius * 0.62f, handY - handRadius * 1.1f,
-                                handRadius * 1.25f, handRadius * 2.0f, 2.0f);
-        g.setColour (juce::Colour (0xfff5f1e9).withAlpha (0.85f));
+        g.fillRoundedRectangle (hx - handW * 0.5f, handY - handH * 0.25f, handW, handH, 2.5f);
+        g.setColour (juce::Colour (0xffa7d6bf));
+        g.drawRoundedRectangle (hx - handW * 0.5f, handY - handH * 0.25f, handW, handH, 2.5f, 0.8f);
+        g.setColour (juce::Colour (0xfff2eee6));
         for (int finger = -1; finger <= 1; ++finger)
         {
-            const float offset = (float) finger * handRadius * 0.36f;
-            g.drawLine (leftHandX + offset, handY - handRadius * 0.5f,
-                        leftHandX + offset * 1.05f, handY - handRadius * 1.65f, 1.0f);
-            g.drawLine (rightHandX + offset, handY - handRadius * 0.5f,
-                        rightHandX + offset * 1.05f, handY - handRadius * 1.65f, 1.0f);
+            const float fx = hx + (float) finger * handW * 0.31f;
+            const float topY = handY - handH * (0.56f + (finger == 0 ? 0.25f : 0.12f));
+            g.drawLine (fx, handY - handH * 0.10f, fx, topY, 1.2f);
+            g.fillEllipse (fx - 0.9f, topY - 0.9f, 1.8f, 1.8f);
         }
     }
 
@@ -358,6 +389,33 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         g.fillEllipse (faceCX + faceR * 0.40f, faceCY + faceR * 0.10f,
                        faceR * 0.30f, faceR * 0.16f);
     }
+
+    // A softly shaded toy nose gives the face a stronger silhouette without hiding the eyes.
+    const float noseTop = faceCY - faceR * 0.38f;
+    const float noseBottom = faceCY + faceR * 0.16f;
+    const float noseHalfWidth = faceR * (0.105f + 0.018f * t);
+    juce::Path nose;
+    nose.startNewSubPath (faceCX - noseHalfWidth * 0.50f, noseTop);
+    nose.cubicTo (faceCX - noseHalfWidth * 1.18f, noseTop + faceR * 0.12f,
+                  faceCX - noseHalfWidth * 0.98f, noseBottom - faceR * 0.035f,
+                  faceCX - noseHalfWidth * 0.34f, noseBottom);
+    nose.cubicTo (faceCX + noseHalfWidth * 0.34f, noseBottom + faceR * 0.025f,
+                  faceCX + noseHalfWidth * 1.02f, noseBottom - faceR * 0.10f,
+                  faceCX + noseHalfWidth * 0.50f, noseTop);
+    nose.closeSubPath();
+    juce::ColourGradient noseGradient (juce::Colour (0xffff8bc0), faceCX - noseHalfWidth, noseTop,
+                                       juce::Colour (0xffb43a70), faceCX + noseHalfWidth, noseBottom, false);
+    noseGradient.addColour (0.42, juce::Colour (0xffdf6299));
+    g.setGradientFill (noseGradient);
+    g.fillPath (nose);
+    g.setColour (juce::Colour (0xffffc0d8).withAlpha (0.78f));
+    g.drawLine (faceCX - noseHalfWidth * 0.20f, noseTop + faceR * 0.055f,
+                faceCX - noseHalfWidth * 0.16f, noseBottom - faceR * 0.10f, 1.4f);
+    g.setColour (juce::Colour (0xff842746).withAlpha (0.48f));
+    g.fillEllipse (faceCX - noseHalfWidth * 0.46f, noseBottom - faceR * 0.065f,
+                   noseHalfWidth * 0.25f, faceR * 0.025f);
+    g.fillEllipse (faceCX + noseHalfWidth * 0.19f, noseBottom - faceR * 0.065f,
+                   noseHalfWidth * 0.25f, faceR * 0.025f);
 
     const float mouthHalfWidth = faceR * (0.56f + 0.20f * t);
     const float mouthTopY = faceCY + faceR * (0.20f + 0.015f * t);
@@ -411,24 +469,43 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         g.setColour (juce::Colour (0xff9f3159).withAlpha (0.55f));
         g.fillPath (innerMouth);
 
-        // Five individually rounded teeth follow the smile's upper curve.
-        const float teethW = mouthHalfWidth * 0.34f;
-        const float teethH = juce::jmax (5.0f, faceR * (0.075f + 0.02f * t));
+        // Five connected-looking upper teeth sit inside the mouth, following the lip's arc.
+        // Centers and widths stay inside the mouth silhouette at all editor sizes.
+        const float teethW = mouthHalfWidth * 0.245f;
+        const float teethH = juce::jmax (5.0f, faceR * (0.075f + 0.016f * t));
         for (int tooth = 0; tooth < 5; ++tooth)
         {
             const float normalizedX = ((float) tooth - 2.0f) / 2.0f;
-            const float tx = faceCX + normalizedX * mouthHalfWidth * 1.28f;
             const float curve = normalizedX * normalizedX;
-            const float ty = mouthTopY + topCurveDepth * (0.15f + 0.60f * curve);
-            g.setColour (juce::Colour (0xff6f2943).withAlpha (0.35f));
-            g.fillRoundedRectangle (tx - teethW * 0.42f + 0.7f, ty + 1.0f,
-                                    teethW * 0.80f, teethH, 2.5f);
+            const float tx = faceCX + normalizedX * mouthHalfWidth * 0.69f;
+            const float ty = mouthTopY + topCurveDepth * (0.08f + 0.82f * (1.0f - curve));
+            const float toothWidth = teethW * (tooth == 2 ? 1.12f : 1.0f);
+            g.setColour (juce::Colour (0xff6f2943).withAlpha (0.38f));
+            g.fillRoundedRectangle (tx - toothWidth * 0.5f + 0.6f, ty + 1.1f,
+                                    toothWidth, teethH, 2.6f);
             g.setColour (juce::Colour (0xffffe8df));
-            g.fillRoundedRectangle (tx - teethW * 0.42f, ty,
-                                    teethW * 0.80f, teethH, 2.5f);
-            g.setColour (juce::Colour (0xfffffff7).withAlpha (0.7f));
-            g.drawLine (tx - teethW * 0.25f, ty + 1.3f,
-                        tx + teethW * 0.12f, ty + 1.3f, 0.8f);
+            g.fillRoundedRectangle (tx - toothWidth * 0.5f, ty,
+                                    toothWidth, teethH, 2.6f);
+            g.setColour (juce::Colour (0xfffffff7).withAlpha (0.72f));
+            g.drawLine (tx - toothWidth * 0.28f, ty + 1.4f,
+                        tx + toothWidth * 0.18f, ty + 1.4f, 0.8f);
+        }
+
+        // A smaller lower row near the corners balances the big grin but leaves room for the tongue.
+        const float lowerToothW = mouthHalfWidth * 0.18f;
+        const float lowerToothH = juce::jmax (4.0f, faceR * 0.055f);
+        for (int tooth = 0; tooth < 4; ++tooth)
+        {
+            const float side = tooth < 2 ? -1.0f : 1.0f;
+            const float position = (tooth % 2 == 0) ? 0.70f : 0.43f;
+            const float tx = faceCX + side * mouthHalfWidth * position;
+            const float ty = mouthTopY + mouthDepth * (0.70f - 0.045f * position);
+            g.setColour (juce::Colour (0xff6f2943).withAlpha (0.35f));
+            g.fillRoundedRectangle (tx - lowerToothW * 0.5f + 0.5f, ty + 0.8f,
+                                    lowerToothW, lowerToothH, 2.0f);
+            g.setColour (juce::Colour (0xffffe8df));
+            g.fillRoundedRectangle (tx - lowerToothW * 0.5f, ty,
+                                    lowerToothW, lowerToothH, 2.0f);
         }
 
         // Tongue is a gentle pink capsule near the lower curve on intense settings.
