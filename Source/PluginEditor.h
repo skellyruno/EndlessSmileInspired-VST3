@@ -13,6 +13,11 @@ public:
                        int buttonX, int buttonY, int buttonW, int buttonH,
                        juce::ComboBox&) override;
     void positionComboBoxText (juce::ComboBox&, juce::Label&) override;
+    void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&,
+                               bool shouldDrawButtonAsHighlighted,
+                               bool shouldDrawButtonAsDown) override;
+    void drawButtonText (juce::Graphics&, juce::TextButton&, bool isMouseOverButton,
+                         bool isButtonDown) override;
 };
 
 class EndlessSmileInspiredAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -33,6 +38,8 @@ private:
     juce::Slider intensity;
     juce::Slider mix;
     juce::ComboBox preset;
+    juce::TextButton previousPresetButton;
+    juce::TextButton nextPresetButton;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> intensityAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
