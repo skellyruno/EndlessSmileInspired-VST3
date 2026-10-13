@@ -127,11 +127,12 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
             filtered[channel] = highPassFilters[(size_t) channel].processSample (0, dry[channel]);
         }
 
-        // Reverb processes a mono or stereo frame without allocating in the audio callback.
+        // JUCE Reverb API expects channel pointers plus a sample count.
+        // This loop processes one frame at a time, so the sample count is 1.
         if (channels == 2)
-            reverb.processStereo (filtered[0], filtered[1]);
+            reverb.processStereo (&filtered[0], &filtered[1], 1);
         else
-            reverb.processMono (filtered[0]);
+            reverb.processMono (&filtered[0], 1);
 
         for (int channel = 0; channel < channels; ++channel)
         {
