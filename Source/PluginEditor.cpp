@@ -100,16 +100,28 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
                               juce::MathConstants<float>::pi * 1.88f, true);
     strokeRoundedPath (g, bezelGlint, juce::Colours::white.withAlpha (0.28f), 1.4f);
 
-    // Angled pointer with a slim shadow and bright center line.
+    // A chunky, angled grip makes the control read as a physical plugin knob,
+    // rather than a flat pointer. Its angle tracks the real attached parameter.
     const float pointerAngle = juce::MathConstants<float>::pi * (0.72f + 1.08f * t);
-    const float px = std::cos (pointerAngle) * knobR * 0.73f;
-    const float py = std::sin (pointerAngle) * knobR * 0.73f;
-    g.setColour (juce::Colours::black.withAlpha (0.48f));
-    g.drawLine (cx + 1.0f, cy + 1.4f, cx + px + 1.0f, cy + py + 1.4f, 3.0f);
-    g.setColour (juce::Colour (0xffe7e8e8).withAlpha (0.92f));
-    g.drawLine (cx, cy, cx + px, cy + py, 2.0f);
-    g.setColour (juce::Colour (0xff8d9294).withAlpha (0.65f));
-    g.fillEllipse (cx - 2.4f, cy - 2.4f, 4.8f, 4.8f);
+    juce::Path grip;
+    grip.addRoundedRectangle (cx - knobR * 0.10f, cy - knobR * 0.185f,
+                              knobR * 0.99f, knobR * 0.37f, knobR * 0.15f);
+    grip.applyTransform (juce::AffineTransform::rotation (pointerAngle, cx, cy));
+    g.setColour (juce::Colours::black.withAlpha (0.58f));
+    g.fillPath (grip, juce::AffineTransform::translation (1.5f, 2.0f));
+    juce::ColourGradient gripGradient (juce::Colour (0xff383a3d), cx, cy - knobR * 0.3f,
+                                       juce::Colour (0xff090a0c), cx, cy + knobR * 0.28f, false);
+    gripGradient.addColour (0.43, juce::Colour (0xff17191c));
+    g.setGradientFill (gripGradient);
+    g.fillPath (grip);
+
+    juce::Path gripGlint;
+    gripGlint.startNewSubPath (cx + knobR * 0.02f, cy - knobR * 0.07f);
+    gripGlint.lineTo (cx + knobR * 0.77f, cy - knobR * 0.07f);
+    gripGlint.applyTransform (juce::AffineTransform::rotation (pointerAngle, cx, cy));
+    strokeRoundedPath (g, gripGlint, juce::Colours::white.withAlpha (0.52f), 1.5f);
+    g.setColour (juce::Colour (0xffa5a8ab).withAlpha (0.92f));
+    g.fillEllipse (cx - 2.8f, cy - 2.8f, 5.6f, 5.6f);
 
     // Render the readout as part of the dial component, after the arc and knob.
     // This avoids the child slider being painted over by its parent's background.
@@ -138,10 +150,20 @@ void EndlessSmileInspiredLookAndFeel::drawComboBox (juce::Graphics& g, int width
 {
     juce::ignoreUnused (isButtonDown, buttonX, buttonY, buttonW, buttonH, box);
     const auto r = juce::Rectangle<float> (0.5f, 0.5f, (float) width - 1.0f, (float) height - 1.0f);
+    const int selected = box.getSelectedId();
+    const juce::Colour categoryAccent = selected <= 2 ? juce::Colour (0xffffa13b)
+        : (selected <= 4 ? juce::Colour (0xff43b7d5)
+        : (selected <= 6 ? juce::Colour (0xfff04491) : juce::Colour (0xffe7d6d8)));
+
     g.setColour (juce::Colour (0xff1d2b30));
-    g.fillRoundedRectangle (r, 4.0f);
-    g.setColour (juce::Colour (0xff829094));
-    g.drawRoundedRectangle (r, 4.0f, 1.0f);
+    g.fillRoundedRectangle (r, 5.0f);
+    g.setColour (juce::Colour (0xff101a1e).withAlpha (0.66f));
+    g.drawRoundedRectangle (r.reduced (0.8f), 5.0f, 1.0f);
+    // Slim preset-family marker and matching outline make each category legible.
+    g.setColour (categoryAccent);
+    g.fillRoundedRectangle (2.0f, 5.0f, 4.0f, (float) height - 10.0f, 2.0f);
+    g.setColour (categoryAccent.withAlpha (0.60f));
+    g.drawRoundedRectangle (r, 5.0f, 1.1f);
 
     const float arrowCX = width - 24.0f;
     const float arrowCY = height * 0.5f;
@@ -150,6 +172,13 @@ void EndlessSmileInspiredLookAndFeel::drawComboBox (juce::Graphics& g, int width
     arrow.lineTo (arrowCX, arrowCY + 4.0f);
     arrow.lineTo (arrowCX + 7.0f, arrowCY - 2.0f);
     strokeRoundedPath (g, arrow, juce::Colour (0xffe5e8e8), 2.0f);
+}
+
+void EndlessSmileInspiredLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
+{
+    label.setBounds (14, 1, juce::jmax (1, box.getWidth() - 48), juce::jmax (1, box.getHeight() - 2));
+    label.setJustificationType (juce::Justification::centredLeft);
+    label.setFont (juce::Font (juce::FontOptions (14.5f, juce::Font::bold)));
 }
 
 EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEditor
@@ -223,6 +252,7 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     const auto bounds = getLocalBounds().toFloat();
     const float intensityValue = (float) intensity.getValue();
     const float t = juce::jlimit (0.0f, 1.0f, intensityValue / 110.0f);
+    const float ease = t * t * (3.0f - 2.0f * t);
 
     // Finished charcoal panel: quiet centre lift, dark edges, subtle deterministic grain.
     juce::ColourGradient background (juce::Colour (0xff6d6a6b), w * 0.46f, h * 0.33f,
@@ -250,14 +280,15 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
 
     // The character is drawn behind the real JUCE intensity slider. This keeps
     // arms behind the dial and gives the whole mascot a consistent silhouette.
-    const float faceCX = w * 0.748f;
-    const float faceCY = h * 0.462f;
     const float faceR = juce::jmin (w * 0.151f, h * 0.267f);
-    const float headBottom = faceCY + faceR * 1.03f;
-    const float torsoTop = faceCY + faceR * 0.69f;
-    const float torsoBottom = h * 0.832f;
-    const float legBottom = h * 0.906f;
-    const float shoeBottom = h * 0.936f;
+    const float bounceX = std::sin (animationPhase * 0.83f) * faceR * 0.010f * ease;
+    const float bounceY = std::cos (animationPhase * 1.17f) * faceR * 0.012f * ease;
+    const float faceCX = w * 0.748f + bounceX;
+    const float faceCY = h * juce::jmap (ease, 0.485f, 0.462f) + bounceY;
+    const float torsoTop = faceCY + faceR * (0.70f - 0.025f * ease);
+    const float torsoBottom = h * (0.795f + 0.037f * ease);
+    const float legBottom = h * (0.888f + 0.018f * ease);
+    const float shoeBottom = legBottom + h * (0.032f + 0.004f * ease);
 
     // Little legs and sneakers: the former dress-like torso now reads as a toy body.
     for (int side = -1; side <= 1; side += 2)
@@ -348,32 +379,37 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         strokeRoundedPath (g, seam, juce::Colour (0xffff9fc2).withAlpha (0.56f), 0.8f);
     }
 
-    // Raised arms: shadow, dark outline, saturated pink tube and narrow glossy edge.
-    const float handY = h * (0.105f - 0.012f * t);
-    const float shoulderY = faceCY + faceR * 0.47f;
+    // The arm pose is a real intensity morph: drooped beside the head at zero,
+    // progressively arcing up, then nearly vertical at the maximum.
+    const float handY = juce::jmap (ease, faceCY + faceR * 0.90f, h * 0.075f);
+    const float shoulderY = faceCY + faceR * (0.43f - 0.035f * ease);
     const float leftShoulderX = faceCX - faceR * 0.67f;
     const float rightShoulderX = faceCX + faceR * 0.67f;
-    const float leftHandX = faceCX - faceR * (1.18f - 0.015f * t);
-    const float rightHandX = faceCX + faceR * (1.18f - 0.015f * t);
+    // Keep hands just outside the head silhouette even in the slumped pose;
+    // otherwise the head drawn later would completely hide them.
+    const float handSpread = 1.10f + 0.08f * ease;
+    const float leftHandX = faceCX - faceR * handSpread;
+    const float rightHandX = faceCX + faceR * handSpread;
+    const float armControlY1 = faceCY + faceR * (0.76f - 0.49f * ease);
+    const float armControlY2 = handY + faceR * (-0.015f + 0.69f * ease);
 
     juce::Path leftArm;
     leftArm.startNewSubPath (leftShoulderX, shoulderY);
-    leftArm.cubicTo (faceCX - faceR * 1.00f, faceCY + faceR * 0.27f,
-                     leftHandX - faceR * 0.19f, handY + faceR * 0.76f,
-                     leftHandX, handY);
+    leftArm.cubicTo (faceCX - faceR * (0.88f + 0.11f * ease), armControlY1,
+                     leftHandX + faceR * 0.13f, armControlY2, leftHandX, handY);
     juce::Path rightArm;
     rightArm.startNewSubPath (rightShoulderX, shoulderY);
-    rightArm.cubicTo (faceCX + faceR * 1.00f, faceCY + faceR * 0.27f,
-                      rightHandX + faceR * 0.19f, handY + faceR * 0.76f,
-                      rightHandX, handY);
-    strokeRoundedPath (g, leftArm, juce::Colours::black.withAlpha (0.24f), 14.0f);
-    strokeRoundedPath (g, rightArm, juce::Colours::black.withAlpha (0.24f), 14.0f);
-    strokeRoundedPath (g, leftArm, juce::Colour (0xff812746), 11.3f);
-    strokeRoundedPath (g, rightArm, juce::Colour (0xff812746), 11.3f);
-    strokeRoundedPath (g, leftArm, juce::Colour (0xfff04491), 8.2f);
-    strokeRoundedPath (g, rightArm, juce::Colour (0xfff04491), 8.2f);
-    strokeRoundedPath (g, leftArm, juce::Colour (0xffffb0d0).withAlpha (0.70f), 1.25f);
-    strokeRoundedPath (g, rightArm, juce::Colour (0xffffb0d0).withAlpha (0.70f), 1.25f);
+    rightArm.cubicTo (faceCX + faceR * (0.88f + 0.11f * ease), armControlY1,
+                      rightHandX - faceR * 0.13f, armControlY2, rightHandX, handY);
+    const float armThickness = 10.0f + 1.8f * ease;
+    strokeRoundedPath (g, leftArm, juce::Colours::black.withAlpha (0.25f), armThickness + 4.0f);
+    strokeRoundedPath (g, rightArm, juce::Colours::black.withAlpha (0.25f), armThickness + 4.0f);
+    strokeRoundedPath (g, leftArm, juce::Colour (0xff812746), armThickness + 0.8f);
+    strokeRoundedPath (g, rightArm, juce::Colour (0xff812746), armThickness + 0.8f);
+    strokeRoundedPath (g, leftArm, juce::Colour (0xfff04491), armThickness - 1.8f);
+    strokeRoundedPath (g, rightArm, juce::Colour (0xfff04491), armThickness - 1.8f);
+    strokeRoundedPath (g, leftArm, juce::Colour (0xffffb0d0).withAlpha (0.68f), 1.25f);
+    strokeRoundedPath (g, rightArm, juce::Colour (0xffffb0d0).withAlpha (0.68f), 1.25f);
 
     // Hands: palms, four narrow fingers and an outward thumb, all in mint enamel.
     const float handW = juce::jmax (9.0f, faceR * 0.072f);
@@ -439,17 +475,17 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     strokeRoundedPath (g, foreheadGlint, juce::Colours::white.withAlpha (0.20f), 2.0f);
 
     // Brows and eyes: the expression can become more animated as the effect rises.
-    const float eyeW = faceR * (0.175f + 0.012f * t);
-    const float eyeH = faceR * (0.285f + 0.025f * t);
-    const float eyeY = faceCY - faceR * 0.34f;
+    const float eyeW = faceR * (0.125f + 0.050f * ease);
+    const float eyeH = faceR * (0.155f + 0.140f * ease);
+    const float eyeY = faceCY - faceR * (0.325f + 0.015f * ease);
     const float eyeOffset = faceR * 0.43f;
     for (int side = -1; side <= 1; side += 2)
     {
         const float ex = faceCX + (float) side * eyeOffset - eyeW * 0.5f;
         juce::Path brow;
         brow.startNewSubPath (ex - eyeW * 0.02f, eyeY - faceR * 0.08f);
-        brow.quadraticTo (ex + eyeW * 0.50f, eyeY - faceR * (0.15f + 0.025f * t),
-                          ex + eyeW * 1.02f, eyeY - faceR * 0.06f);
+        brow.quadraticTo (ex + eyeW * 0.50f, eyeY - faceR * (0.075f + 0.075f * ease),
+                          ex + eyeW * 1.02f, eyeY - faceR * (0.025f + 0.035f * ease));
         strokeRoundedPath (g, brow, juce::Colour (0xffb84a6f).withAlpha (0.48f), 2.0f);
         g.setColour (juce::Colour (0xff7c2447).withAlpha (0.55f));
         g.fillEllipse (ex - 1.0f, eyeY + 1.0f, eyeW + 2.0f, eyeH + 1.0f);
@@ -461,6 +497,25 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         g.setColour (juce::Colours::white.withAlpha (0.30f));
         g.fillEllipse (ex + eyeW * 0.62f, eyeY + eyeH * 0.58f,
                        eyeW * 0.09f, eyeH * 0.08f);
+
+        const float lidAmount = 0.64f * (1.0f - ease);
+        if (lidAmount > 0.025f)
+        {
+            juce::Path lid;
+            lid.startNewSubPath (ex - 1.5f, eyeY - 1.5f);
+            lid.lineTo (ex + eyeW + 1.5f, eyeY - 1.5f);
+            lid.lineTo (ex + eyeW + 1.5f, eyeY + eyeH * lidAmount);
+            lid.quadraticTo (ex + eyeW * 0.50f, eyeY + eyeH * (lidAmount + 0.10f),
+                             ex - 1.5f, eyeY + eyeH * lidAmount);
+            lid.closeSubPath();
+            g.setColour (juce::Colour (0xffd8f0df));
+            g.fillPath (lid);
+            juce::Path lidCrease;
+            lidCrease.startNewSubPath (ex + 1.0f, eyeY + eyeH * lidAmount);
+            lidCrease.quadraticTo (ex + eyeW * 0.50f, eyeY + eyeH * (lidAmount + 0.10f),
+                                   ex + eyeW - 1.0f, eyeY + eyeH * lidAmount);
+            strokeRoundedPath (g, lidCrease, juce::Colour (0xffa42f59).withAlpha (0.38f), 1.0f);
+        }
     }
 
     // Soft cheeks with two highlights give the face depth without muddy outlines.
@@ -503,31 +558,37 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillEllipse (faceCX + noseHalfWidth * 0.16f, noseBottom - faceR * 0.047f,
                    noseHalfWidth * 0.25f, faceR * 0.020f);
 
-    const float mouthHalfWidth = faceR * (0.57f + 0.19f * t);
+    const float mouthHalfWidth = faceR * (0.43f + 0.35f * ease);
     const float mouthTopY = faceCY + faceR * (0.205f + 0.012f * t);
-    const float mouthDepth = faceR * (0.09f + 0.35f * t);
+    const float openT = juce::jlimit (0.0f, 1.0f, (t - 0.18f) / 0.82f);
+    const float mouthDepth = faceR * (0.04f + 0.34f * openT);
 
     if (t < 0.30f)
     {
-        // Gentle smile at low intensity.
-        juce::Path smileShadow;
-        smileShadow.startNewSubPath (faceCX - mouthHalfWidth, mouthTopY + 2.0f);
-        smileShadow.cubicTo (faceCX - mouthHalfWidth * 0.42f, mouthTopY + mouthDepth * 1.85f,
-                             faceCX + mouthHalfWidth * 0.42f, mouthTopY + mouthDepth * 1.85f,
-                             faceCX + mouthHalfWidth, mouthTopY + 2.0f);
-        strokeRoundedPath (g, smileShadow, juce::Colour (0xff812746), faceR * 0.082f);
-        juce::Path smile;
-        smile.startNewSubPath (faceCX - mouthHalfWidth, mouthTopY);
-        smile.cubicTo (faceCX - mouthHalfWidth * 0.42f, mouthTopY + mouthDepth * 1.75f,
-                       faceCX + mouthHalfWidth * 0.42f, mouthTopY + mouthDepth * 1.75f,
-                       faceCX + mouthHalfWidth, mouthTopY);
-        strokeRoundedPath (g, smile, pink, faceR * 0.058f);
-        strokeRoundedPath (g, smile, juce::Colour (0xffffb7d2).withAlpha (0.75f), 1.2f);
+        // At zero the corners fall and the centre rises into a frown. As intensity
+        // enters, the frown gently turns over into a small smile before opening.
+        const float frownAmount = 1.0f - juce::jlimit (0.0f, 1.0f, t / 0.30f);
+        const float cornerY = mouthTopY + faceR * 0.065f * frownAmount;
+        const float centreY = mouthTopY - faceR * 0.042f * frownAmount
+                            + faceR * 0.075f * (1.0f - frownAmount);
+        juce::Path closedExpressionShadow;
+        closedExpressionShadow.startNewSubPath (faceCX - mouthHalfWidth, cornerY + 2.0f);
+        closedExpressionShadow.cubicTo (faceCX - mouthHalfWidth * 0.40f, centreY + 1.5f,
+                                        faceCX + mouthHalfWidth * 0.40f, centreY + 1.5f,
+                                        faceCX + mouthHalfWidth, cornerY + 2.0f);
+        strokeRoundedPath (g, closedExpressionShadow, juce::Colour (0xff812746), faceR * 0.075f);
+        juce::Path closedExpression;
+        closedExpression.startNewSubPath (faceCX - mouthHalfWidth, cornerY);
+        closedExpression.cubicTo (faceCX - mouthHalfWidth * 0.40f, centreY,
+                                  faceCX + mouthHalfWidth * 0.40f, centreY,
+                                  faceCX + mouthHalfWidth, cornerY);
+        strokeRoundedPath (g, closedExpression, pink, faceR * 0.052f);
+        strokeRoundedPath (g, closedExpression, juce::Colour (0xffffb7d2).withAlpha (0.75f), 1.15f);
     }
     else
     {
-        // Crescent mouth with a rounded chin curve and pink upper lip.
-        const float topCurveDepth = faceR * (0.15f + 0.075f * t);
+        // Crescent mouth opens smoothly from a tiny smile into an exaggerated grin.
+        const float topCurveDepth = faceR * (0.045f + 0.17f * openT);
         const float bottomY = mouthTopY + mouthDepth;
         juce::Path mouth;
         mouth.startNewSubPath (faceCX - mouthHalfWidth, mouthTopY);
@@ -568,13 +629,13 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         strokeRoundedPath (g, upperLip, juce::Colour (0xffffb6d2).withAlpha (0.76f), 1.3f);
 
         // Six connected-looking upper teeth follow the smile arc, not a flat line.
-        const int upperToothCount = 6;
-        const float upperToothW = mouthHalfWidth * 0.255f;
-        const float upperToothH = juce::jmax (5.0f, faceR * (0.070f + 0.012f * t));
+        const int upperToothCount = 8;
+        const float upperToothW = mouthHalfWidth * 0.205f;
+        const float upperToothH = juce::jmax (4.0f, faceR * (0.030f + 0.064f * openT));
         for (int tooth = 0; tooth < upperToothCount; ++tooth)
         {
             const float nx = ((float) tooth - ((float) upperToothCount - 1.0f) * 0.5f) / (((float) upperToothCount - 1.0f) * 0.5f);
-            const float tx = faceCX + nx * mouthHalfWidth * 0.70f;
+            const float tx = faceCX + nx * mouthHalfWidth * 0.79f;
             const float curve = 1.0f - nx * nx;
             const float ty = mouthTopY + topCurveDepth * (0.72f * curve + 0.08f) + 1.5f;
             const float toothW = upperToothW * (1.0f - 0.08f * std::abs (nx));
@@ -589,13 +650,14 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
                         tx + toothW * 0.19f, ty + 1.1f, 0.7f);
         }
 
-        // Four small lower teeth sit near the corners so the tongue remains readable.
-        const float lowerToothW = mouthHalfWidth * 0.14f;
-        const float lowerToothH = juce::jmax (3.5f, faceR * 0.043f);
-        for (int tooth = 0; tooth < 4; ++tooth)
+        // Six small lower teeth frame the tongue without becoming detached tiles.
+        const float lowerToothW = mouthHalfWidth * 0.105f;
+        const float lowerToothH = juce::jmax (3.0f, faceR * 0.034f);
+        for (int tooth = 0; tooth < 6; ++tooth)
         {
-            const float side = tooth < 2 ? -1.0f : 1.0f;
-            const float position = (tooth % 2 == 0) ? 0.70f : 0.48f;
+            const float side = tooth < 3 ? -1.0f : 1.0f;
+            const int localTooth = tooth % 3;
+            const float position = localTooth == 0 ? 0.76f : (localTooth == 1 ? 0.59f : 0.42f);
             const float tx = faceCX + side * mouthHalfWidth * position;
             const float ty = mouthTopY + mouthDepth * (0.78f - 0.025f * position);
             g.setColour (juce::Colour (0xff4c172d).withAlpha (0.40f));
@@ -643,5 +705,8 @@ void EndlessSmileInspiredAudioProcessorEditor::resized()
 
 void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
 {
+    animationPhase += 0.075f;
+    if (animationPhase >= juce::MathConstants<float>::twoPi)
+        animationPhase -= juce::MathConstants<float>::twoPi;
     repaint();
 }
