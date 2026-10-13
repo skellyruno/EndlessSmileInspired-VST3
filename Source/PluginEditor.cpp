@@ -24,13 +24,15 @@ namespace
 
 void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     int x, int y, int width, int height, float sliderPosProportional,
-    float rotaryStartAngle, float rotaryEndAngle, juce::Slider&)
+    float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider)
 {
     juce::ignoreUnused (rotaryStartAngle, rotaryEndAngle);
 
     const float side = (float) juce::jmin (width, height);
     const float cx = (float) x + (float) width * 0.5f;
-    const float cy = (float) y + (float) height * 0.445f;
+    // Keep the dial centre tied to its width so added readout space below
+    // the knob does not push the visual dial down as the editor is resized.
+    const float cy = (float) y + (float) width * 0.487f;
     const float radius = side * 0.455f;
     const float start = juce::MathConstants<float>::pi * 0.70f;
     const float end = juce::MathConstants<float>::pi * 2.30f;
@@ -108,6 +110,27 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     g.drawLine (cx, cy, cx + px, cy + py, 2.0f);
     g.setColour (juce::Colour (0xff8d9294).withAlpha (0.65f));
     g.fillEllipse (cx - 2.4f, cy - 2.4f, 4.8f, 4.8f);
+
+    // Render the readout as part of the dial component, after the arc and knob.
+    // This avoids the child slider being painted over by its parent's background.
+    const float readoutY = cy + radius + 8.0f;
+    g.setColour (juce::Colour (0xff282629).withAlpha (0.16f));
+    g.fillRoundedRectangle (cx - 46.0f, readoutY + 1.0f, 92.0f, 24.0f, 1.5f);
+    g.setColour (juce::Colour (0xffd4d0d0).withAlpha (0.82f));
+    g.drawRoundedRectangle (cx - 45.0f, readoutY, 90.0f, 24.0f, 1.0f, 0.9f);
+    g.setColour (juce::Colour (0xfffbfafa));
+    g.setFont (juce::Font (juce::FontOptions (13.5f)));
+    g.drawText (juce::String (slider.getValue(), 2),
+                juce::Rectangle<int> (juce::roundToInt (cx - 43.0f),
+                                      juce::roundToInt (readoutY), 86, 24),
+                juce::Justification::centred);
+
+    g.setColour (juce::Colour (0xff171719));
+    g.setFont (juce::Font (juce::FontOptions (14.5f, juce::Font::bold)));
+    g.drawText ("INTENSITY",
+                juce::Rectangle<int> (juce::roundToInt (cx - 72.0f),
+                                      juce::roundToInt (readoutY + 25.0f), 144, 20),
+                juce::Justification::centred);
 }
 
 void EndlessSmileInspiredLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
@@ -236,32 +259,6 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
                          w * 0.242f, h * 0.421f,
                          w * 0.256f, h * 0.307f);
     strokeRoundedPath (g, accentCurve, juce::Colour (0xffe4dfd9), 3.5f);
-
-    // Dial label and numeric display aligned to the rotary control's true bounds.
-    const float dialCX = w * 0.50f;
-    const float dialWidth = (float) juce::jmin (310, juce::roundToInt (h * 0.44f));
-    const float dialTop = h * 0.06f;
-    const float dialCY = dialTop + (dialWidth + 30.0f) * 0.445f;
-    const float dialR = dialWidth * 0.455f;
-    const float readoutY = dialCY + dialR * 0.535f + 12.0f;
-    const float labelY = readoutY + 27.0f;
-
-    g.setColour (juce::Colour (0xff282629).withAlpha (0.12f));
-    g.fillRoundedRectangle (dialCX - 46.0f, readoutY + 1.5f, 92.0f, 25.0f, 1.5f);
-    g.setColour (juce::Colour (0xffd4d0d0).withAlpha (0.80f));
-    g.drawRoundedRectangle (dialCX - 45.0f, readoutY, 90.0f, 24.0f, 1.0f, 0.9f);
-    g.setColour (juce::Colour (0xfffbfafa));
-    g.setFont (juce::Font (juce::FontOptions (13.5f)));
-    g.drawText (juce::String (intensityValue, 2),
-                juce::Rectangle<int> (juce::roundToInt (dialCX - 43.0f),
-                                      juce::roundToInt (readoutY), 86, 24),
-                juce::Justification::centred);
-    g.setColour (juce::Colour (0xff171719));
-    g.setFont (juce::Font (juce::FontOptions (14.5f, juce::Font::bold)));
-    g.drawText ("INTENSITY",
-                juce::Rectangle<int> (juce::roundToInt (dialCX - 72.0f),
-                                      juce::roundToInt (labelY), 144, 20),
-                juce::Justification::centred);
 
     // Clean-room smile mascot. Shadow, orange rim, mint face, and face details
     // are layered deliberately so the mouth stays organic at every intensity.
@@ -415,12 +412,12 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         g.fillPath (innerMouth);
 
         // Five individually rounded teeth follow the smile's upper curve.
-        const float teethW = mouthHalfWidth * 1.36f / 5.0f;
+        const float teethW = mouthHalfWidth * 0.34f;
         const float teethH = juce::jmax (5.0f, faceR * (0.075f + 0.02f * t));
         for (int tooth = 0; tooth < 5; ++tooth)
         {
             const float normalizedX = ((float) tooth - 2.0f) / 2.0f;
-            const float tx = faceCX + normalizedX * teethW * 0.94f;
+            const float tx = faceCX + normalizedX * mouthHalfWidth * 1.28f;
             const float curve = normalizedX * normalizedX;
             const float ty = mouthTopY + topCurveDepth * (0.15f + 0.60f * curve);
             g.setColour (juce::Colour (0xff6f2943).withAlpha (0.35f));
@@ -458,7 +455,7 @@ void EndlessSmileInspiredAudioProcessorEditor::resized()
 {
     const auto bounds = getLocalBounds();
     const int dialWidth = juce::jmin (310, juce::roundToInt ((float) bounds.getHeight() * 0.44f));
-    const int dialHeight = dialWidth + 30;
+    const int dialHeight = dialWidth + 50;
     const int dialX = juce::roundToInt ((float) bounds.getWidth() * 0.50f) - dialWidth / 2;
     const int dialY = juce::roundToInt ((float) bounds.getHeight() * 0.06f);
     intensity.setBounds (dialX, dialY, dialWidth, dialHeight);
