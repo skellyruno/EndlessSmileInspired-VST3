@@ -300,6 +300,23 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     preset.setColour (juce::ComboBox::textColourId, juce::Colour (0xff30252b));
     preset.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xff9f2e59));
     preset.setColour (juce::ComboBox::arrowColourId, juce::Colour (0xff30252b));
+    preset.setTooltip ("Choose a build-up profile. Previous/next arrows also cycle the seven presets.");
+    preset.setWantsKeyboardFocus (true);
+    preset.onChange = [this]
+    {
+        const int id = preset.getSelectedId();
+        switch (id)
+        {
+            case 1: preset.setTooltip ("Fist in the Air — Soft: reverb and a gentle high-pass sweep."); break;
+            case 2: preset.setTooltip ("Helium Jumping — Soft: reverb, high-pass sweep and delay."); break;
+            case 3: preset.setTooltip ("No Limit — Medium: reverb and a full high-pass sweep."); break;
+            case 4: preset.setTooltip ("Face Melting Joy — Medium: reverb, high-pass sweep and delay."); break;
+            case 5: preset.setTooltip ("Smack You in the Face — Hard: reverb, full high-pass, noise and riser."); break;
+            case 6: preset.setTooltip ("Broken Teeth — Hard: all hard effects plus delay."); break;
+            case 7: preset.setTooltip ("Dada Dynamite — Extreme: all effects; noise and riser follow intensity."); break;
+            default: preset.setTooltip ("Choose one of the seven build-up profiles."); break;
+        }
+    };
     addAndMakeVisible (preset);
 
     previousPresetButton.setName ("preset-previous");
@@ -342,6 +359,10 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     presetAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
         (p.state, "preset", preset);
 
+    // Begin from the restored parameter state instead of animating from zero
+    // whenever the editor is reopened.
+    animatedIntensity = juce::jlimit (0.0f, 1.0f, (float) intensity.getValue() / 110.0f);
+    preset.onChange();
     startTimerHz (30);
 }
 
@@ -355,8 +376,9 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     const float w = (float) getWidth();
     const float h = (float) getHeight();
     const auto bounds = getLocalBounds().toFloat();
-    const float intensityValue = (float) intensity.getValue();
-    const float t = juce::jlimit (0.0f, 1.0f, intensityValue / 110.0f);
+    // Use the smoothed intensity for the mascot only. The actual rotary control
+    // and numeric readout remain directly attached to the true parameter value.
+    const float t = juce::jlimit (0.0f, 1.0f, animatedIntensity);
     const float ease = t * t * (3.0f - 2.0f * t);
 
     // Finished charcoal panel: quiet centre lift, dark edges, subtle deterministic grain.
@@ -394,6 +416,14 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     const float torsoBottom = h * (0.795f + 0.037f * ease);
     const float legBottom = h * (0.888f + 0.018f * ease);
     const float shoeBottom = legBottom + h * (0.032f + 0.004f * ease);
+
+    // A tiny intensity-weighted squash/stretch gives the vector mascot some
+    // physical spring without changing the host's control positions.
+    const float squashPulse = std::sin (animationPhase * 2.0f) * 0.012f * ease;
+    const float characterScaleX = 1.0f + 0.014f * ease + squashPulse;
+    const float characterScaleY = 1.0f - 0.008f * ease - squashPulse * 0.75f;
+    g.saveState();
+    g.addTransform (juce::AffineTransform::scale (characterScaleX, characterScaleY, faceCX, faceCY));
 
     // Little legs and sneakers: the former dress-like torso now reads as a toy body.
     for (int side = -1; side <= 1; side += 2)
@@ -638,6 +668,18 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         g.fillPath (eye, juce::AffineTransform::translation (0.0f, 1.5f));
         g.setColour (juce::Colour (0xffa42f59));
         g.fillPath (eye);
+
+        // Tiny pupils look low and inward when the mascot is miserable, then
+        // lift as it approaches the ecstatic pose.
+        const float pupilW = eyeW * (0.17f + 0.035f * ease);
+        const float pupilH = eyeH * (0.19f + 0.035f * ease);
+        const float pupilX = eyeCX - pupilW * 0.5f - (float) side * eyeW * (0.055f + 0.025f * ease);
+        const float pupilY = eyeCY - pupilH * 0.5f + eyeH * (0.115f - 0.27f * ease);
+        juce::Path pupil;
+        pupil.addEllipse (pupilX, pupilY, pupilW, pupilH);
+        pupil.applyTransform (juce::AffineTransform::rotation (eyeTilt, eyeCX, eyeCY));
+        g.setColour (juce::Colour (0xff45182d).withAlpha (0.86f));
+        g.fillPath (pupil);
         g.setColour (juce::Colour (0xffffd1df).withAlpha (0.88f));
         g.fillEllipse (ex + eyeW * 0.18f, eyeY + eyeH * 0.11f,
                        eyeW * 0.24f, eyeH * 0.18f);
@@ -645,7 +687,7 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         g.fillEllipse (ex + eyeW * 0.62f, eyeY + eyeH * 0.58f,
                        eyeW * 0.09f, eyeH * 0.08f);
 
-        const float lidAmount = 0.64f * (1.0f - ease);
+        const float lidAmount = juce::jmax (0.64f * (1.0f - ease), 0.98f * blinkAmount);
         if (lidAmount > 0.025f)
         {
             juce::Path lid;
@@ -855,6 +897,9 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         }
     }
 
+    // Restore the panel coordinate system before drawing the fixed footer.
+    g.restoreState();
+
     // Branded footer inspired by the original product-title strip while keeping
     // this clean-room build identified as the Inspired edition.
     g.setColour (juce::Colour (0xffe7e2dd).withAlpha (0.82f));
@@ -872,13 +917,15 @@ void EndlessSmileInspiredAudioProcessorEditor::resized()
 {
     const auto bounds = getLocalBounds();
     const int dialWidth = juce::jmin (280, juce::roundToInt ((float) bounds.getHeight() * 0.40f));
-    const int dialHeight = dialWidth + 50;
+    // The custom knob draws its readout and label below the ring; reserve enough
+    // height for both so neither gets clipped at the default editor size.
+    const int dialHeight = dialWidth + 115;
     const int dialX = juce::roundToInt ((float) bounds.getWidth() * 0.39f) - dialWidth / 2;
     const int dialY = juce::roundToInt ((float) bounds.getHeight() * 0.055f);
     intensity.setBounds (dialX, dialY, dialWidth, dialHeight);
 
     const int leftMargin = juce::roundToInt ((float) bounds.getWidth() * 0.044f);
-    const int controlWidth = juce::jmin (620, juce::roundToInt ((float) bounds.getWidth() * 0.37f));
+    const int controlWidth = juce::jmin (680, juce::roundToInt ((float) bounds.getWidth() * 0.43f));
     const int presetY = juce::roundToInt ((float) bounds.getHeight() * 0.66f);
     preset.setBounds (leftMargin + 44, presetY + 1, controlWidth - 88, 68);
     previousPresetButton.setBounds (leftMargin - 12, presetY + 14, 56, 42);
@@ -888,8 +935,29 @@ void EndlessSmileInspiredAudioProcessorEditor::resized()
 
 void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
 {
-    animationPhase += 0.075f;
+    // Smooth only the illustrated character, not the actual parameter. This
+    // keeps the motion fluid under automation while the knob stays immediate.
+    const float target = juce::jlimit (0.0f, 1.0f, (float) intensity.getValue() / 110.0f);
+    animatedIntensity += (target - animatedIntensity) * 0.22f;
+    if (std::abs (target - animatedIntensity) < 0.0005f)
+        animatedIntensity = target;
+
+    // Faster, more energetic motion at high intensity; nearly still at zero.
+    animationPhase += 0.035f + 0.055f * animatedIntensity;
     if (animationPhase >= juce::MathConstants<float>::twoPi)
         animationPhase -= juce::MathConstants<float>::twoPi;
+
+    ++animationFrame;
+    if (framesUntilBlink <= 0)
+    {
+        blinkAmount = 1.0f;
+        framesUntilBlink = 92 + (animationFrame % 61);
+    }
+    else
+    {
+        blinkAmount *= 0.55f;
+        --framesUntilBlink;
+    }
+
     repaint();
 }
