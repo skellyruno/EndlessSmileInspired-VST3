@@ -12,6 +12,7 @@ public:
     void drawComboBox (juce::Graphics&, int width, int height, bool isButtonDown,
                        int buttonX, int buttonY, int buttonW, int buttonH,
                        juce::ComboBox&) override;
+    void positionComboBoxText (juce::ComboBox&, juce::Label&) override;
 };
 
 class EndlessSmileInspiredAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -36,6 +37,9 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> intensityAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> presetAttachment;
+
+    // UI-only motion clock; animation is intensity weighted and audio-thread independent.
+    float animationPhase = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EndlessSmileInspiredAudioProcessorEditor)
 };
