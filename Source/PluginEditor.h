@@ -45,8 +45,13 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> presetAttachment;
 
-    // UI-only motion clock; animation is intensity weighted and audio-thread independent.
+    // UI-only animation state. Values are smoothed on the message thread so the
+    // character feels elastic when the host/automation moves the intensity knob.
     float animationPhase = 0.0f;
+    float animatedIntensity = 0.0f;
+    float blinkAmount = 0.0f;
+    int animationFrame = 0;
+    int framesUntilBlink = 82;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EndlessSmileInspiredAudioProcessorEditor)
 };
