@@ -36,13 +36,11 @@ private:
     // Declare the LookAndFeel before the controls so it outlives them.
     EndlessSmileInspiredLookAndFeel lookAndFeel;
     juce::Slider intensity;
-    juce::Slider mix;
     juce::ComboBox preset;
     juce::TextButton previousPresetButton;
     juce::TextButton nextPresetButton;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> intensityAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> presetAttachment;
 
     // UI-only animation state. Values are smoothed on the message thread so the
