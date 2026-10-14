@@ -100,15 +100,15 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     // rather than a flat pointer. Its angle tracks the real attached parameter.
     const float pointerAngle = current;
     juce::Path grip;
-    // Broad asymmetric paddle with clipped corners: the reference knob is a
-    // physical handle, not a thin indicator needle.
-    grip.startNewSubPath (cx - knobR * 0.79f, cy - knobR * 0.34f);
-    grip.lineTo (cx + knobR * 0.43f, cy - knobR * 0.43f);
-    grip.lineTo (cx + knobR * 0.72f, cy - knobR * 0.13f);
-    grip.lineTo (cx + knobR * 0.79f, cy + knobR * 0.12f);
-    grip.lineTo (cx + knobR * 0.52f, cy + knobR * 0.38f);
-    grip.lineTo (cx - knobR * 0.56f, cy + knobR * 0.48f);
-    grip.lineTo (cx - knobR * 0.83f, cy + knobR * 0.18f);
+    // Long tapered blade: broad rounded tail, widest near the middle, narrowing
+    // to a pointed tip on the +x end (which points at the current value).
+    grip.startNewSubPath (cx - knobR * 0.95f, cy - knobR * 0.26f);
+    grip.quadraticTo (cx - knobR * 0.20f, cy - knobR * 0.60f,
+                      cx + knobR * 0.55f, cy - knobR * 0.20f);
+    grip.lineTo (cx + knobR * 0.98f, cy + knobR * 0.02f);
+    grip.lineTo (cx + knobR * 0.50f, cy + knobR * 0.28f);
+    grip.quadraticTo (cx - knobR * 0.25f, cy + knobR * 0.52f,
+                      cx - knobR * 0.95f, cy + knobR * 0.22f);
     grip.closeSubPath();
     grip.applyTransform (juce::AffineTransform::rotation (pointerAngle - quarterTurn, cx, cy));
     g.setColour (juce::Colours::black.withAlpha (0.62f));
@@ -122,11 +122,23 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     g.setColour (juce::Colour (0xff6b6c70).withAlpha (0.88f));
     g.strokePath (grip, juce::PathStrokeType (0.8f));
 
+    // Light tip facet so the pointing end is unmistakable.
+    juce::Path gripTip;
+    gripTip.startNewSubPath (cx + knobR * 0.98f, cy + knobR * 0.02f);
+    gripTip.lineTo (cx + knobR * 0.72f, cy - knobR * 0.10f);
+    gripTip.lineTo (cx + knobR * 0.74f, cy + knobR * 0.14f);
+    gripTip.closeSubPath();
+    gripTip.applyTransform (juce::AffineTransform::rotation (pointerAngle - quarterTurn, cx, cy));
+    g.setColour (juce::Colour (0xffdadbdd).withAlpha (0.92f));
+    g.fillPath (gripTip);
+
+    // Curved specular ridge along the blade.
     juce::Path gripGlint;
-    gripGlint.startNewSubPath (cx - knobR * 0.49f, cy - knobR * 0.05f);
-    gripGlint.lineTo (cx + knobR * 0.44f, cy - knobR * 0.05f);
+    gripGlint.startNewSubPath (cx - knobR * 0.72f, cy - knobR * 0.10f);
+    gripGlint.quadraticTo (cx - knobR * 0.10f, cy - knobR * 0.32f,
+                           cx + knobR * 0.58f, cy - knobR * 0.06f);
     gripGlint.applyTransform (juce::AffineTransform::rotation (pointerAngle - quarterTurn, cx, cy));
-    strokeRoundedPath (g, gripGlint, juce::Colours::white.withAlpha (0.56f), 1.9f);
+    strokeRoundedPath (g, gripGlint, juce::Colours::white.withAlpha (0.50f), 2.2f);
     g.setColour (juce::Colour (0xffa5a8ab).withAlpha (0.92f));
     g.fillEllipse (cx - 2.8f, cy - 2.8f, 5.6f, 5.6f);
 
@@ -251,11 +263,15 @@ void EndlessSmileInspiredLookAndFeel::drawButtonBackground (juce::Graphics& g, j
     arrow.closeSubPath();
     g.setColour (juce::Colours::black.withAlpha (0.32f));
     g.fillPath (arrow, juce::AffineTransform::translation (1.0f, 2.0f));
-    g.setColour (down ? juce::Colour (0xffd85b8b)
-                      : (highlighted ? juce::Colour (0xffffbd54) : juce::Colour (0xffff9b2f)));
+    const juce::Colour arrowTop = down ? juce::Colour (0xffe8789f)
+                                       : (highlighted ? juce::Colour (0xffffcb78) : juce::Colour (0xffffb04d));
+    const juce::Colour arrowBottom = down ? juce::Colour (0xffc94577)
+                                          : (highlighted ? juce::Colour (0xffff9a2a) : juce::Colour (0xfff0780f));
+    g.setGradientFill (juce::ColourGradient (arrowTop, 0.0f, b.getY(),
+                                             arrowBottom, 0.0f, b.getBottom(), false));
     g.fillPath (arrow);
-    g.setColour (juce::Colour (0xffffd17d).withAlpha (0.90f));
-    g.strokePath (arrow, juce::PathStrokeType (1.1f));
+    g.setColour (juce::Colour (0xff9b4c0c).withAlpha (0.85f));
+    g.strokePath (arrow, juce::PathStrokeType (1.4f, juce::PathStrokeType::mitered));
 }
 
 void EndlessSmileInspiredLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
