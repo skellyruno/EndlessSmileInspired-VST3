@@ -3,7 +3,6 @@
 
 namespace
 {
-    const juce::Colour pink       (0xfff04491);
 
     void strokeRoundedPath (juce::Graphics& g, const juce::Path& path,
                             juce::Colour colour, float thickness)
@@ -86,6 +85,14 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     body.addColour (0.72, juce::Colour (0xff97999d));
     g.setGradientFill (body);
     g.fillEllipse (cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f);
+
+    // Fine concentric rings give the disc a spun, brushed-metal finish.
+    for (float r = 2.5f; r < knobR - 1.0f; r += 2.2f)
+    {
+        const bool light = ((int) (r / 2.2f)) % 2 == 0;
+        g.setColour ((light ? juce::Colours::white : juce::Colours::black).withAlpha (light ? 0.07f : 0.05f));
+        g.drawEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f, 0.7f);
+    }
 
     // Subtle glints on the upper edge of the metal ring.
     juce::Path bezelGlint;
@@ -431,105 +438,99 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     g.saveState();
     g.addTransform (juce::AffineTransform::scale (characterScaleX, characterScaleY, faceCX, faceCY));
 
-    // Little legs and sneakers: the former dress-like torso now reads as a toy body.
+    // ---- Skeleton character ------------------------------------------------
+    // Original bone-and-skull mascot. The same intensity morph drives it: slumped,
+    // tilted skull with a frown and drooping arms at zero; raised arms, wide-open
+    // sockets and a big toothy grin at maximum.
+    const juce::Colour boneLight (0xffeee6d2);
+    const juce::Colour boneShade (0xffbfb49a);
+    const juce::Colour boneEdge (0xff6b6150);
+    const juce::Colour socketDark (0xff1b181c);
+
+    const auto drawBone = [&g, boneLight, boneEdge] (float x1, float y1, float x2, float y2, float thickness)
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.25f));
+        g.drawLine (x1 + 1.5f, y1 + 1.5f, x2 + 1.5f, y2 + 1.5f, thickness + 3.0f);
+        g.setColour (boneEdge);
+        g.drawLine (x1, y1, x2, y2, thickness + 1.6f);
+        g.setColour (boneLight);
+        g.drawLine (x1, y1, x2, y2, thickness - 0.8f);
+        const float r = thickness * 0.78f;
+        for (const juce::Point<float> pt : { juce::Point<float> (x1, y1), juce::Point<float> (x2, y2) })
+        {
+            g.setColour (boneEdge);
+            g.fillEllipse (pt.x - r - 0.8f, pt.y - r - 0.8f, (r + 0.8f) * 2.0f, (r + 0.8f) * 2.0f);
+            g.setColour (boneLight);
+            g.fillEllipse (pt.x - r, pt.y - r, r * 2.0f, r * 2.0f);
+        }
+    };
+
+    const auto cubicAt = [] (float u, juce::Point<float> a, juce::Point<float> b,
+                             juce::Point<float> c, juce::Point<float> d)
+    {
+        const float m = 1.0f - u;
+        return a * (m * m * m) + b * (3.0f * m * m * u) + c * (3.0f * m * u * u) + d * (u * u * u);
+    };
+
+    // Ground shadow.
+    g.setColour (juce::Colours::black.withAlpha (0.22f));
+    g.fillEllipse (faceCX - faceR * 0.62f, shoeBottom - 4.0f, faceR * 1.24f, 9.0f);
+
+    // Legs: thigh, shin and a flat foot bone.
     for (int side = -1; side <= 1; side += 2)
     {
-        const float legX = faceCX + (float) side * faceR * 0.17f;
-        g.setColour (juce::Colours::black.withAlpha (0.25f));
-        g.drawLine (legX + 1.0f, torsoBottom - 2.0f, legX + 1.0f, legBottom, 10.0f);
-        g.setColour (juce::Colour (0xfff04491));
-        g.drawLine (legX, torsoBottom - 4.0f, legX, legBottom, 7.0f);
-        g.setColour (juce::Colour (0xffd8f0df));
-        g.drawLine (legX, legBottom - 6.0f, legX, legBottom, 5.0f);
-
-        const float shoeW = faceR * 0.31f;
-        const float shoeH = shoeBottom - legBottom;
-        juce::Path shoe;
-        if (side < 0)
-        {
-            shoe.startNewSubPath (legX - 7.0f, legBottom - 2.0f);
-            shoe.cubicTo (legX - shoeW * 0.30f, legBottom + shoeH * 0.15f,
-                          legX - shoeW * 0.68f, shoeBottom - shoeH * 0.22f,
-                          legX - shoeW, shoeBottom - shoeH * 0.08f);
-            shoe.cubicTo (legX - shoeW * 1.05f, shoeBottom,
-                          legX - shoeW * 0.12f, shoeBottom + 1.0f,
-                          legX + 5.0f, shoeBottom - 1.0f);
-        }
-        else
-        {
-            shoe.startNewSubPath (legX + 7.0f, legBottom - 2.0f);
-            shoe.cubicTo (legX + shoeW * 0.30f, legBottom + shoeH * 0.15f,
-                          legX + shoeW * 0.68f, shoeBottom - shoeH * 0.22f,
-                          legX + shoeW, shoeBottom - shoeH * 0.08f);
-            shoe.cubicTo (legX + shoeW * 1.05f, shoeBottom,
-                          legX + shoeW * 0.12f, shoeBottom + 1.0f,
-                          legX - 5.0f, shoeBottom - 1.0f);
-        }
-        shoe.closeSubPath();
-        g.setColour (juce::Colour (0xff872746));
-        g.fillPath (shoe, juce::AffineTransform::translation (0.0f, 2.0f));
-        g.setColour (juce::Colour (0xfff44b96));
-        g.fillPath (shoe);
-        g.setColour (juce::Colour (0xffffbfd5).withAlpha (0.86f));
-        juce::Path shoeStripe;
-        shoeStripe.startNewSubPath (legX - shoeW * 0.48f, legBottom + shoeH * 0.43f);
-        shoeStripe.lineTo (legX + shoeW * 0.10f, legBottom + shoeH * 0.64f);
-        strokeRoundedPath (g, shoeStripe, juce::Colour (0xffffbfd5), 2.0f);
+        const float legX = faceCX + (float) side * faceR * 0.15f;
+        const float footY = shoeBottom - 4.0f;
+        drawBone (legX, torsoBottom - 6.0f, legX, legBottom, 7.0f);
+        drawBone (legX, legBottom, legX, footY, 6.0f);
+        drawBone (legX, footY, legX + (float) side * faceR * 0.26f, footY, 6.0f);
     }
 
-    // Rounded, tapered spring torso, with a shoulder collar and four ribbed bands.
-    juce::Path torso;
-    torso.startNewSubPath (faceCX - faceR * 0.39f, torsoTop);
-    torso.cubicTo (faceCX - faceR * 0.50f, torsoTop + faceR * 0.18f,
-                   faceCX - faceR * 0.43f, torsoBottom - faceR * 0.16f,
-                   faceCX - faceR * 0.34f, torsoBottom);
-    torso.cubicTo (faceCX - faceR * 0.14f, torsoBottom + 2.0f,
-                   faceCX + faceR * 0.14f, torsoBottom + 2.0f,
-                   faceCX + faceR * 0.34f, torsoBottom);
-    torso.cubicTo (faceCX + faceR * 0.43f, torsoBottom - faceR * 0.16f,
-                   faceCX + faceR * 0.50f, torsoTop + faceR * 0.18f,
-                   faceCX + faceR * 0.39f, torsoTop);
-    torso.closeSubPath();
-    torso.applyTransform (juce::AffineTransform::scale (1.08f, 1.0f, faceCX, torsoTop));
-    g.setColour (juce::Colours::black.withAlpha (0.18f));
-    g.fillPath (torso, juce::AffineTransform::translation (2.0f, 3.0f));
-    juce::ColourGradient torsoGradient (juce::Colour (0xffff83b2), faceCX - faceR * 0.30f, torsoTop,
-                                        juce::Colour (0xffca2f6b), faceCX + faceR * 0.33f, torsoBottom, false);
-    torsoGradient.addColour (0.47, juce::Colour (0xffed4b8f));
-    g.setGradientFill (torsoGradient);
-    g.fillPath (torso);
+    // Pelvis.
+    const float pelvisY = torsoBottom - 14.0f;
+    g.setColour (boneEdge);
+    g.fillEllipse (faceCX - faceR * 0.34f - 1.0f, pelvisY - 1.0f, faceR * 0.68f + 2.0f, 18.0f);
+    g.setColour (boneLight);
+    g.fillEllipse (faceCX - faceR * 0.34f, pelvisY, faceR * 0.68f, 16.0f);
+    g.setColour (socketDark);
+    g.fillEllipse (faceCX - faceR * 0.075f, pelvisY + 4.0f, faceR * 0.15f, 8.0f);
 
-    // A thick collar separates the head from the ribbed spring body.
-    juce::Path collar;
-    collar.startNewSubPath (faceCX - faceR * 0.39f, torsoTop + faceR * 0.025f);
-    collar.quadraticTo (faceCX, torsoTop + faceR * 0.13f,
-                        faceCX + faceR * 0.39f, torsoTop + faceR * 0.025f);
-    strokeRoundedPath (g, collar, juce::Colour (0xff9b2d58), 5.0f);
-    strokeRoundedPath (g, collar, juce::Colour (0xffff8fba).withAlpha (0.75f), 2.0f);
+    // Ribcage: dark cavity, four rib pairs, then the spine on top.
+    const float cageTop = torsoTop - faceR * 0.10f;
+    g.setColour (socketDark.withAlpha (0.62f));
+    g.fillEllipse (faceCX - faceR * 0.46f, cageTop, faceR * 0.92f, (pelvisY + 2.0f) - cageTop);
 
     const float visibleTorsoTop = faceCY + faceR * 0.93f;
-    for (int band = 0; band < 4; ++band)
+    for (int rib = 0; rib < 4; ++rib)
     {
-        const float u = 0.12f + (float) band * 0.22f;
-        const float y = visibleTorsoTop + (torsoBottom - visibleTorsoTop) * u;
-        const float halfW = faceR * (0.40f - (float) band * 0.020f) * 1.08f;
-        juce::Path seam;
-        seam.startNewSubPath (faceCX - halfW, y);
-        seam.cubicTo (faceCX - halfW * 0.42f, y + faceR * 0.065f,
-                      faceCX + halfW * 0.42f, y + faceR * 0.065f,
-                      faceCX + halfW, y);
-        strokeRoundedPath (g, seam, juce::Colour (0xffa52859).withAlpha (0.76f), 1.5f);
-        strokeRoundedPath (g, seam, juce::Colour (0xffff9fc2).withAlpha (0.56f), 0.8f);
+        const float ribY = visibleTorsoTop + (pelvisY - visibleTorsoTop) * (0.08f + 0.22f * (float) rib);
+        const float ribHalfWidth = faceR * (0.44f - 0.03f * (float) rib);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            const float sd = (float) side;
+            juce::Path ribPath;
+            ribPath.startNewSubPath (faceCX + sd * 3.0f, ribY);
+            ribPath.cubicTo (faceCX + sd * ribHalfWidth * 0.60f, ribY - 4.0f,
+                             faceCX + sd * ribHalfWidth, ribY,
+                             faceCX + sd * ribHalfWidth * 0.92f, ribY + faceR * 0.10f);
+            strokeRoundedPath (g, ribPath, boneEdge, 6.2f);
+            strokeRoundedPath (g, ribPath, boneLight, 4.4f);
+        }
+    }
+    for (float vy = torsoTop; vy < pelvisY; vy += 7.5f)
+    {
+        g.setColour (boneEdge);
+        g.fillEllipse (faceCX - 4.4f, vy - 4.4f, 8.8f, 8.8f);
+        g.setColour (boneLight);
+        g.fillEllipse (faceCX - 3.6f, vy - 3.6f, 7.2f, 7.2f);
     }
 
-    // The arm pose is a real intensity morph: drooped beside the head at zero,
-    // progressively arcing up, then nearly vertical at the maximum.
+    // Arms: the same intensity morph as before (drooped at zero, raised at maximum),
+    // drawn as upper-arm and forearm bones with a splayed, four-finger hand.
     const float handY = juce::jmap (ease, faceCY + faceR * 0.90f, h * 0.075f);
     const float shoulderY = faceCY + faceR * (0.43f - 0.035f * ease);
     const float leftShoulderX = faceCX - faceR * 0.67f;
     const float rightShoulderX = faceCX + faceR * 0.67f;
-    // Keep hands just outside the head silhouette even in the slumped pose;
-    // otherwise the head drawn later would completely hide them.
     const float handSpread = 1.10f + 0.10f * ease;
     const float armSway = std::sin (animationPhase * 1.65f) * faceR * 0.025f * ease;
     const float leftHandX = faceCX - faceR * handSpread - armSway;
@@ -537,225 +538,128 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     const float armControlY1 = faceCY + faceR * (0.76f - 0.49f * ease);
     const float armControlY2 = handY + faceR * (-0.015f + 0.69f * ease);
 
-    juce::Path leftArm;
-    leftArm.startNewSubPath (leftShoulderX, shoulderY);
-    leftArm.cubicTo (faceCX - faceR * (0.88f + 0.11f * ease), armControlY1,
-                     leftHandX + faceR * 0.13f, armControlY2, leftHandX, handY);
-    juce::Path rightArm;
-    rightArm.startNewSubPath (rightShoulderX, shoulderY);
-    rightArm.cubicTo (faceCX + faceR * (0.88f + 0.11f * ease), armControlY1,
-                      rightHandX - faceR * 0.13f, armControlY2, rightHandX, handY);
-    const float armThickness = 13.0f + 2.2f * ease;
-    strokeRoundedPath (g, leftArm, juce::Colours::black.withAlpha (0.25f), armThickness + 4.0f);
-    strokeRoundedPath (g, rightArm, juce::Colours::black.withAlpha (0.25f), armThickness + 4.0f);
-    strokeRoundedPath (g, leftArm, juce::Colour (0xff812746), armThickness + 0.8f);
-    strokeRoundedPath (g, rightArm, juce::Colour (0xff812746), armThickness + 0.8f);
-    strokeRoundedPath (g, leftArm, juce::Colour (0xfff04491), armThickness - 1.8f);
-    strokeRoundedPath (g, rightArm, juce::Colour (0xfff04491), armThickness - 1.8f);
-    strokeRoundedPath (g, leftArm, juce::Colour (0xffffb0d0).withAlpha (0.68f), 1.25f);
-    strokeRoundedPath (g, rightArm, juce::Colour (0xffffb0d0).withAlpha (0.68f), 1.25f);
-
-    // Hands: palms, four narrow fingers and an outward thumb, all in mint enamel.
-    const float handW = juce::jmax (11.0f, faceR * 0.082f);
-    const float handH = juce::jmax (12.0f, faceR * 0.098f);
-    for (int side = 0; side < 2; ++side)
+    const auto drawArm = [&] (juce::Point<float> p0, juce::Point<float> p1,
+                              juce::Point<float> p2, juce::Point<float> p3)
     {
-        const float hx = side == 0 ? leftHandX : rightHandX;
-        g.setColour (juce::Colour (0xff9e2e5a));
-        g.fillRoundedRectangle (hx - handW * 0.52f, handY - handH * 0.30f + 1.0f,
-                                handW * 1.04f, handH, 2.4f);
-        g.setColour (juce::Colour (0xffd8f0df));
-        g.fillRoundedRectangle (hx - handW * 0.50f, handY - handH * 0.30f,
-                                handW, handH, 2.4f);
-        g.setColour (juce::Colour (0xfff6f2e9));
-        for (int finger = -1; finger <= 2; ++finger)
+        const juce::Point<float> elbow = cubicAt (0.5f, p0, p1, p2, p3);
+        drawBone (p0.x, p0.y, elbow.x, elbow.y, 8.5f + 1.0f * ease);
+        drawBone (elbow.x, elbow.y, p3.x, p3.y, 7.0f + 1.0f * ease);
+
+        juce::Point<float> dir = p3 - elbow;
+        const float len = std::sqrt (dir.x * dir.x + dir.y * dir.y);
+        if (len > 0.001f)
+            dir = dir / len;
+
+        for (int k = 0; k < 4; ++k)
         {
-            const float fx = hx + ((float) finger - 0.5f) * handW * 0.23f;
-            const float fingerTop = handY - handH * (0.78f + ((finger == 0 || finger == 1) ? 0.30f : 0.13f));
-            g.drawLine (fx, handY - handH * 0.14f, fx, fingerTop, 1.25f);
-            g.fillEllipse (fx - 0.8f, fingerTop - 0.8f, 1.6f, 1.6f);
+            const float a = ((float) k - 1.5f) * 0.30f;
+            const float c = std::cos (a);
+            const float s = std::sin (a);
+            const juce::Point<float> fd (dir.x * c - dir.y * s, dir.x * s + dir.y * c);
+            const float fingerLength = faceR * ((k == 0 || k == 3) ? 0.115f : 0.135f);
+            drawBone (p3.x, p3.y, p3.x + fd.x * fingerLength, p3.y + fd.y * fingerLength, 3.2f);
         }
-        const float thumbDir = side == 0 ? -1.0f : 1.0f;
-        g.drawLine (hx + thumbDir * handW * 0.34f, handY + handH * 0.12f,
-                    hx + thumbDir * handW * 0.64f, handY - handH * 0.07f, 1.45f);
-    }
+    };
 
-    // Head drop shadow and subtle dark undershadow to lift the orange shell.
-    g.setColour (juce::Colours::black.withAlpha (0.20f));
-    g.fillEllipse (faceCX - faceR * 1.035f + 2.0f, faceCY - faceR * 1.02f + 5.0f,
-                   faceR * 2.07f, faceR * 2.07f);
-    g.setColour (juce::Colour (0xff8b5125).withAlpha (0.75f));
-    g.drawEllipse (faceCX - faceR * 1.025f, faceCY - faceR * 1.025f,
-                   faceR * 2.05f, faceR * 2.05f, 2.5f);
-    juce::ColourGradient shell (juce::Colour (0xffffb044), faceCX - faceR * 0.83f, faceCY - faceR,
-                                juce::Colour (0xfff18520), faceCX + faceR * 0.78f, faceCY + faceR, false);
-    shell.addColour (0.42, juce::Colour (0xffffa02f));
-    g.setGradientFill (shell);
-    g.fillEllipse (faceCX - faceR * 1.03f, faceCY - faceR * 1.03f,
-                   faceR * 2.06f, faceR * 2.06f);
+    drawArm ({ leftShoulderX, shoulderY },
+             { faceCX - faceR * (0.88f + 0.11f * ease), armControlY1 },
+             { leftHandX + faceR * 0.13f, armControlY2 },
+             { leftHandX, handY });
+    drawArm ({ rightShoulderX, shoulderY },
+             { faceCX + faceR * (0.88f + 0.11f * ease), armControlY1 },
+             { rightHandX - faceR * 0.13f, armControlY2 },
+             { rightHandX, handY });
 
-    // Layer a few swept orange tufts into the top rim, giving the silhouette
-    // more of the animated orange-haired mascot look instead of a flat ring.
-    for (int tuft = 0; tuft < 7; ++tuft)
-    {
-        const float a = juce::MathConstants<float>::pi * (1.18f + 0.107f * (float) tuft);
-        const float nextA = a + 0.11f;
-        const float tipA = a + 0.055f;
-        juce::Path hair;
-        hair.startNewSubPath (faceCX + std::cos (a) * faceR * 0.91f,
-                              faceCY + std::sin (a) * faceR * 0.91f);
-        hair.cubicTo (faceCX + std::cos (a) * faceR * 1.01f,
-                      faceCY + std::sin (a) * faceR * 1.01f,
-                      faceCX + std::cos (tipA) * faceR * 1.09f,
-                      faceCY + std::sin (tipA) * faceR * 1.09f,
-                      faceCX + std::cos (tipA) * faceR * 1.09f,
-                      faceCY + std::sin (tipA) * faceR * 1.09f);
-        hair.cubicTo (faceCX + std::cos (nextA) * faceR * 1.03f,
-                      faceCY + std::sin (nextA) * faceR * 1.03f,
-                      faceCX + std::cos (nextA) * faceR * 0.95f,
-                      faceCY + std::sin (nextA) * faceR * 0.95f,
-                      faceCX + std::cos (nextA) * faceR * 0.91f,
-                      faceCY + std::sin (nextA) * faceR * 0.91f);
-        hair.closeSubPath();
-        g.setColour (tuft % 2 == 0 ? juce::Colour (0xffffad36) : juce::Colour (0xffff9628));
-        g.fillPath (hair);
-        g.setColour (juce::Colour (0xffffd078).withAlpha (0.60f));
-        g.strokePath (hair, juce::PathStrokeType (0.9f));
-    }
+    // ---- Skull (tilted forward when miserable) -----------------------------
+    const float headTilt = 0.075f * (1.0f - ease) + std::sin (animationPhase * 1.3f) * 0.018f * ease;
+    g.saveState();
+    g.addTransform (juce::AffineTransform::rotation (headTilt, faceCX, faceCY + faceR * 0.75f));
 
-    // Orange shell specular strokes, not a perfectly flat circle.
-    juce::Path shellGlint;
-    shellGlint.startNewSubPath (faceCX - faceR * 0.73f, faceCY - faceR * 0.78f);
-    shellGlint.cubicTo (faceCX - faceR * 0.40f, faceCY - faceR * 1.01f,
-                        faceCX + faceR * 0.18f, faceCY - faceR * 0.99f,
-                        faceCX + faceR * 0.47f, faceCY - faceR * 0.86f);
-    strokeRoundedPath (g, shellGlint, juce::Colour (0xffffd078).withAlpha (0.76f), 2.0f);
+    g.setColour (juce::Colours::black.withAlpha (0.26f));
+    g.fillEllipse (faceCX - faceR + 5.0f, faceCY - faceR + 8.0f, faceR * 2.0f, faceR * 2.0f);
 
-    juce::ColourGradient faceGradient (juce::Colour (0xffe8f8eb), faceCX - faceR * 0.50f,
-                                       faceCY - faceR * 0.76f,
-                                       juce::Colour (0xffc9e4d2), faceCX + faceR * 0.56f,
-                                       faceCY + faceR * 0.86f, false);
-    faceGradient.addColour (0.38, juce::Colour (0xffd9f0df));
-    g.setGradientFill (faceGradient);
-    g.fillEllipse (faceCX - faceR * 0.88f, faceCY - faceR * 0.88f,
-                   faceR * 1.76f, faceR * 1.76f);
+    juce::ColourGradient skull (juce::Colour (0xfffbf6ea), faceCX - faceR * 0.45f, faceCY - faceR * 0.55f,
+                                boneShade, faceCX + faceR * 0.85f, faceCY + faceR * 0.85f, true);
+    g.setGradientFill (skull);
+    g.fillEllipse (faceCX - faceR, faceCY - faceR, faceR * 2.0f, faceR * 2.0f);
+    g.setColour (boneEdge);
+    g.drawEllipse (faceCX - faceR, faceCY - faceR, faceR * 2.0f, faceR * 2.0f, 2.4f);
 
-    // A faint forehead highlight makes the face enamel appear rounded.
-    juce::Path foreheadGlint;
-    foreheadGlint.startNewSubPath (faceCX - faceR * 0.53f, faceCY - faceR * 0.70f);
-    foreheadGlint.quadraticTo (faceCX, faceCY - faceR * 0.88f,
-                               faceCX + faceR * 0.45f, faceCY - faceR * 0.70f);
-    strokeRoundedPath (g, foreheadGlint, juce::Colours::white.withAlpha (0.20f), 2.0f);
+    // A small crack and cheekbone shading give the skull some character.
+    juce::Path crack;
+    crack.startNewSubPath (faceCX + faceR * 0.18f, faceCY - faceR * 0.985f);
+    crack.lineTo (faceCX + faceR * 0.10f, faceCY - faceR * 0.86f);
+    crack.lineTo (faceCX + faceR * 0.20f, faceCY - faceR * 0.76f);
+    crack.lineTo (faceCX + faceR * 0.12f, faceCY - faceR * 0.64f);
+    strokeRoundedPath (g, crack, boneEdge.withAlpha (0.70f), 1.6f);
+    g.setColour (boneShade.withAlpha (0.28f));
+    g.fillEllipse (faceCX - faceR * 0.80f, faceCY + faceR * 0.02f, faceR * 0.36f, faceR * 0.22f);
+    g.fillEllipse (faceCX + faceR * 0.44f, faceCY + faceR * 0.02f, faceR * 0.36f, faceR * 0.22f);
 
-    // Brows and eyes: the expression can become more animated as the effect rises.
-    const float eyeW = faceR * (0.125f + 0.085f * ease);
+    // Eye sockets: bigger and rounder as intensity rises; lids droop when miserable.
+    const float eyeW = faceR * (0.16f + 0.09f * ease);
     const float eyeH = faceR * (0.155f + 0.300f * ease);
     const float eyeY = faceCY - faceR * (0.325f + 0.030f * ease);
     const float eyeOffset = faceR * 0.43f;
+    const float lidAmount = juce::jmax (0.64f * (1.0f - ease),
+                                        0.98f * blinkAmount * (1.0f - 0.85f * ease));
     for (int side = -1; side <= 1; side += 2)
     {
-        const float ex = faceCX + (float) side * eyeOffset - eyeW * 0.5f;
-        juce::Path brow;
-        brow.startNewSubPath (ex - eyeW * 0.02f, eyeY - faceR * 0.08f);
-        brow.quadraticTo (ex + eyeW * 0.50f, eyeY - faceR * (0.075f + 0.075f * ease),
-                          ex + eyeW * 1.02f, eyeY - faceR * (0.025f + 0.035f * ease));
-        strokeRoundedPath (g, brow, juce::Colour (0xffb84a6f).withAlpha (0.48f), 2.0f);
-        const float eyeCX = ex + eyeW * 0.5f;
+        const float sd = (float) side;
+        const float eyeCX = faceCX + sd * eyeOffset;
+        const float ex = eyeCX - eyeW * 0.5f;
         const float eyeCY = eyeY + eyeH * 0.5f;
-        const float eyeTilt = (float) side * (0.025f + 0.17f * ease);
-        juce::Path eyeSocket;
-        eyeSocket.addEllipse (ex - eyeW * 0.10f, eyeY - eyeH * 0.025f,
-                              eyeW * 1.20f, eyeH * 1.05f);
-        eyeSocket.applyTransform (juce::AffineTransform::rotation (eyeTilt, eyeCX, eyeCY));
-        g.setColour (juce::Colour (0xfff6e9dd).withAlpha (0.92f));
-        g.fillPath (eyeSocket);
-        juce::Path eye;
-        eye.addEllipse (ex, eyeY, eyeW, eyeH);
-        eye.applyTransform (juce::AffineTransform::rotation (eyeTilt, eyeCX, eyeCY));
-        g.setColour (juce::Colour (0xff7c2447).withAlpha (0.58f));
-        g.fillPath (eye, juce::AffineTransform::translation (0.0f, 1.5f));
-        g.setColour (juce::Colour (0xffa42f59));
-        g.fillPath (eye);
+        const float eyeTilt = sd * (0.04f + 0.14f * ease);
 
-        // Tiny pupils look low and inward when the mascot is miserable, then
-        // lift as it approaches the ecstatic pose.
-        const float pupilW = eyeW * (0.17f + 0.035f * ease);
-        const float pupilH = eyeH * (0.19f + 0.035f * ease);
-        const float pupilX = eyeCX - pupilW * 0.5f - (float) side * eyeW * (0.055f + 0.025f * ease);
-        const float pupilY = eyeCY - pupilH * 0.5f + eyeH * (0.115f - 0.27f * ease);
-        juce::Path pupil;
-        pupil.addEllipse (pupilX, pupilY, pupilW, pupilH);
-        pupil.applyTransform (juce::AffineTransform::rotation (eyeTilt, eyeCX, eyeCY));
-        g.setColour (juce::Colour (0xff45182d).withAlpha (0.86f));
-        g.fillPath (pupil);
-        g.setColour (juce::Colour (0xffffd1df).withAlpha (0.88f));
-        g.fillEllipse (ex + eyeW * 0.18f, eyeY + eyeH * 0.11f,
-                       eyeW * 0.24f, eyeH * 0.18f);
-        g.setColour (juce::Colours::white.withAlpha (0.36f));
-        g.fillEllipse (ex + eyeW * 0.62f, eyeY + eyeH * 0.58f,
-                       eyeW * 0.09f, eyeH * 0.08f);
+        juce::Path socket;
+        socket.addEllipse (ex, eyeY, eyeW, eyeH);
+        socket.applyTransform (juce::AffineTransform::rotation (eyeTilt, eyeCX, eyeCY));
+        g.setColour (socketDark);
+        g.fillPath (socket);
 
-        const float lidAmount = juce::jmax (0.64f * (1.0f - ease),
-                                            0.98f * blinkAmount * (1.0f - 0.85f * ease));
-        if (lidAmount > 0.025f)
+        // A small pale glint in each socket; it sits low when miserable.
+        const float glintR = eyeW * 0.11f;
+        const float glintY = eyeCY + eyeH * (0.10f * (1.0f - ease) - 0.06f * ease);
+        g.setColour (juce::Colour (0xffe9fbff).withAlpha (0.92f));
+        g.fillEllipse (eyeCX - glintR, glintY - glintR, glintR * 2.0f, glintR * 2.0f);
+
+        if (lidAmount > 0.01f)
         {
-            juce::Path lid;
-            lid.startNewSubPath (ex - 1.5f, eyeY - 1.5f);
-            lid.lineTo (ex + eyeW + 1.5f, eyeY - 1.5f);
-            lid.lineTo (ex + eyeW + 1.5f, eyeY + eyeH * lidAmount);
-            lid.quadraticTo (ex + eyeW * 0.50f, eyeY + eyeH * (lidAmount + 0.10f),
-                             ex - 1.5f, eyeY + eyeH * lidAmount);
-            lid.closeSubPath();
-            g.setColour (juce::Colour (0xffd8f0df));
-            g.fillPath (lid);
-            juce::Path lidCrease;
-            lidCrease.startNewSubPath (ex + 1.0f, eyeY + eyeH * lidAmount);
-            lidCrease.quadraticTo (ex + eyeW * 0.50f, eyeY + eyeH * (lidAmount + 0.10f),
-                                   ex + eyeW - 1.0f, eyeY + eyeH * lidAmount);
-            strokeRoundedPath (g, lidCrease, juce::Colour (0xffa42f59).withAlpha (0.38f), 1.0f);
+            const float lidY = eyeY + eyeH * lidAmount;
+            g.saveState();
+            g.reduceClipRegion (socket, juce::AffineTransform());
+            g.setColour (boneLight);
+            g.fillRect (eyeCX - eyeW, eyeY - eyeH * 0.5f, eyeW * 2.0f, lidY - (eyeY - eyeH * 0.5f));
+            g.setColour (boneEdge);
+            g.drawLine (eyeCX - eyeW, lidY, eyeCX + eyeW, lidY, 1.6f);
+            g.restoreState();
         }
+        g.setColour (boneEdge);
+        g.strokePath (socket, juce::PathStrokeType (1.6f));
+
+        // Brow ridge: inner end raised when sad, outer end raised when happy.
+        const float browY = eyeY - faceR * 0.06f;
+        juce::Path brow;
+        brow.startNewSubPath (eyeCX - sd * eyeW * 0.62f, browY - faceR * 0.07f * (1.0f - ease));
+        brow.quadraticTo (eyeCX, browY - faceR * 0.05f,
+                          eyeCX + sd * eyeW * 0.62f, browY - faceR * 0.07f * ease);
+        strokeRoundedPath (g, brow, boneEdge.withAlpha (0.75f), 2.2f);
     }
 
-    // Soft cheeks with two highlights give the face depth without muddy outlines.
-    const float cheekAlpha = 0.08f + 0.13f * t;
-    g.setColour (juce::Colour (0xffff8bae).withAlpha (cheekAlpha));
-    g.fillEllipse (faceCX - faceR * 0.73f, faceCY + faceR * 0.13f,
-                   faceR * 0.31f, faceR * 0.16f);
-    g.fillEllipse (faceCX + faceR * 0.42f, faceCY + faceR * 0.13f,
-                   faceR * 0.31f, faceR * 0.16f);
-    g.setColour (juce::Colours::white.withAlpha (0.18f));
-    g.drawLine (faceCX - faceR * 0.67f, faceCY + faceR * 0.18f,
-                faceCX - faceR * 0.49f, faceCY + faceR * 0.18f, 1.0f);
-    g.drawLine (faceCX + faceR * 0.49f, faceCY + faceR * 0.18f,
-                faceCX + faceR * 0.67f, faceCY + faceR * 0.18f, 1.0f);
-
-    // Tall glossy capsule nose, intentionally narrower than the eye spacing.
-    const float noseTop = faceCY - faceR * (0.32f + 0.035f * ease);
-    const float noseBottom = faceCY + faceR * (0.12f + 0.035f * ease);
-    const float noseHalfWidth = faceR * (0.12f + 0.020f * ease);
+    // Nasal cavity.
     juce::Path nose;
-    nose.startNewSubPath (faceCX - noseHalfWidth * 0.52f, noseTop + faceR * 0.015f);
-    nose.cubicTo (faceCX - noseHalfWidth * 1.06f, noseTop + faceR * 0.10f,
-                  faceCX - noseHalfWidth * 0.96f, noseBottom - faceR * 0.03f,
-                  faceCX - noseHalfWidth * 0.26f, noseBottom);
-    nose.cubicTo (faceCX + noseHalfWidth * 0.26f, noseBottom + faceR * 0.015f,
-                  faceCX + noseHalfWidth * 0.96f, noseBottom - faceR * 0.08f,
-                  faceCX + noseHalfWidth * 0.52f, noseTop + faceR * 0.015f);
+    nose.startNewSubPath (faceCX, faceCY - faceR * 0.02f);
+    nose.quadraticTo (faceCX - faceR * 0.03f, faceCY + faceR * 0.05f,
+                      faceCX - faceR * 0.085f, faceCY + faceR * 0.14f);
+    nose.lineTo (faceCX, faceCY + faceR * 0.105f);
+    nose.lineTo (faceCX + faceR * 0.085f, faceCY + faceR * 0.14f);
+    nose.quadraticTo (faceCX + faceR * 0.03f, faceCY + faceR * 0.05f,
+                      faceCX, faceCY - faceR * 0.02f);
     nose.closeSubPath();
-    juce::ColourGradient noseGradient (juce::Colour (0xffff9ac8), faceCX - noseHalfWidth, noseTop,
-                                       juce::Colour (0xffa92e65), faceCX + noseHalfWidth, noseBottom, false);
-    noseGradient.addColour (0.40, juce::Colour (0xffe45d9b));
-    g.setGradientFill (noseGradient);
+    g.setColour (socketDark);
     g.fillPath (nose);
-    g.setColour (juce::Colour (0xffffd0e2).withAlpha (0.80f));
-    g.drawLine (faceCX - noseHalfWidth * 0.31f, noseTop + faceR * 0.06f,
-                faceCX - noseHalfWidth * 0.22f, noseBottom - faceR * 0.10f, 1.5f);
-    g.setColour (juce::Colour (0xff842746).withAlpha (0.60f));
-    g.fillEllipse (faceCX - noseHalfWidth * 0.42f, noseBottom - faceR * 0.047f,
-                   noseHalfWidth * 0.25f, faceR * 0.020f);
-    g.fillEllipse (faceCX + noseHalfWidth * 0.16f, noseBottom - faceR * 0.047f,
-                   noseHalfWidth * 0.25f, faceR * 0.020f);
 
+    // Mouth: a stitched frown at zero, turning to a smile and then a wide toothy grin.
     const float mouthHalfWidth = faceR * (0.43f + 0.35f * ease);
     const float mouthTopY = faceCY + faceR * (0.205f + 0.012f * t);
     const float openT = juce::jlimit (0.0f, 1.0f, (t - 0.18f) / 0.82f);
@@ -763,29 +667,27 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
 
     if (t < 0.30f)
     {
-        // At zero the corners fall and the centre rises into a frown. As intensity
-        // enters, the frown gently turns over into a small smile before opening.
         const float frownAmount = 1.0f - juce::jlimit (0.0f, 1.0f, t / 0.30f);
         const float cornerY = mouthTopY + faceR * 0.065f * frownAmount;
         const float centreY = mouthTopY - faceR * 0.042f * frownAmount
                             + faceR * 0.075f * (1.0f - frownAmount);
-        juce::Path closedExpressionShadow;
-        closedExpressionShadow.startNewSubPath (faceCX - mouthHalfWidth, cornerY + 2.0f);
-        closedExpressionShadow.cubicTo (faceCX - mouthHalfWidth * 0.40f, centreY + 1.5f,
-                                        faceCX + mouthHalfWidth * 0.40f, centreY + 1.5f,
-                                        faceCX + mouthHalfWidth, cornerY + 2.0f);
-        strokeRoundedPath (g, closedExpressionShadow, juce::Colour (0xff812746), faceR * 0.075f);
-        juce::Path closedExpression;
-        closedExpression.startNewSubPath (faceCX - mouthHalfWidth, cornerY);
-        closedExpression.cubicTo (faceCX - mouthHalfWidth * 0.40f, centreY,
-                                  faceCX + mouthHalfWidth * 0.40f, centreY,
-                                  faceCX + mouthHalfWidth, cornerY);
-        strokeRoundedPath (g, closedExpression, pink, faceR * 0.052f);
-        strokeRoundedPath (g, closedExpression, juce::Colour (0xffffb7d2).withAlpha (0.75f), 1.15f);
+        const juce::Point<float> m0 (faceCX - mouthHalfWidth, cornerY);
+        const juce::Point<float> m1 (faceCX - mouthHalfWidth * 0.40f, centreY);
+        const juce::Point<float> m2 (faceCX + mouthHalfWidth * 0.40f, centreY);
+        const juce::Point<float> m3 (faceCX + mouthHalfWidth, cornerY);
+        juce::Path closedMouth;
+        closedMouth.startNewSubPath (m0);
+        closedMouth.cubicTo (m1, m2, m3);
+        strokeRoundedPath (g, closedMouth, socketDark, faceR * 0.05f);
+        for (int k = 1; k < 10; ++k)
+        {
+            const juce::Point<float> tp = cubicAt ((float) k / 10.0f, m0, m1, m2, m3);
+            g.setColour (socketDark);
+            g.drawLine (tp.x, tp.y - faceR * 0.035f, tp.x, tp.y + faceR * 0.035f, 1.4f);
+        }
     }
     else
     {
-        // Crescent mouth opens smoothly from a tiny smile into an exaggerated grin.
         const float topCurveDepth = faceR * (0.045f + 0.17f * openT);
         const float bottomY = mouthTopY + mouthDepth;
         juce::Path mouth;
@@ -800,111 +702,49 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
                        faceCX - mouthHalfWidth * 0.84f, bottomY - mouthDepth * 0.08f,
                        faceCX - mouthHalfWidth, mouthTopY);
         mouth.closeSubPath();
-        g.setColour (juce::Colour (0xff76233f));
+        g.setColour (socketDark);
         g.fillPath (mouth);
+        g.setColour (boneEdge);
+        g.strokePath (mouth, juce::PathStrokeType (1.8f));
 
-        // Interior burgundy gradient provides a little depth to the open grin.
-        juce::ColourGradient mouthGradient (juce::Colour (0xffa5365b), faceCX, mouthTopY + topCurveDepth,
-                                            juce::Colour (0xff671d3c), faceCX, bottomY, false);
-        g.setGradientFill (mouthGradient);
-        juce::Path innerMouth;
-        innerMouth.startNewSubPath (faceCX - mouthHalfWidth * 0.87f, mouthTopY + topCurveDepth * 0.68f);
-        innerMouth.cubicTo (faceCX - mouthHalfWidth * 0.49f, mouthTopY + topCurveDepth * 1.20f,
-                            faceCX + mouthHalfWidth * 0.49f, mouthTopY + topCurveDepth * 1.20f,
-                            faceCX + mouthHalfWidth * 0.87f, mouthTopY + topCurveDepth * 0.68f);
-        innerMouth.cubicTo (faceCX + mouthHalfWidth * 0.66f, bottomY - mouthDepth * 0.14f,
-                            faceCX - mouthHalfWidth * 0.66f, bottomY - mouthDepth * 0.14f,
-                            faceCX - mouthHalfWidth * 0.87f, mouthTopY + topCurveDepth * 0.68f);
-        innerMouth.closeSubPath();
-        g.fillPath (innerMouth);
-
-        juce::Path upperLip;
-        upperLip.startNewSubPath (faceCX - mouthHalfWidth, mouthTopY);
-        upperLip.cubicTo (faceCX - mouthHalfWidth * 0.54f, mouthTopY + topCurveDepth,
-                          faceCX + mouthHalfWidth * 0.54f, mouthTopY + topCurveDepth,
-                          faceCX + mouthHalfWidth, mouthTopY);
-        strokeRoundedPath (g, upperLip, pink, faceR * 0.060f);
-        strokeRoundedPath (g, upperLip, juce::Colour (0xffffb6d2).withAlpha (0.76f), 1.3f);
-
-        // Continuous enamel strip follows the upper lip. Fine seams suggest
-        // separate rounded teeth without making them look like floating tiles.
-        const float upperToothH = juce::jmax (4.0f, faceR * (0.040f + 0.066f * openT));
-        const auto upperToothTop = [&] (float nx)
+        const auto drawTooth = [&g, boneLight, boneEdge] (float cxTooth, float topY, float widthTooth, float heightTooth)
         {
-            return mouthTopY + topCurveDepth * (0.72f * (1.0f - nx * nx) + 0.08f) + 1.2f;
+            g.setColour (boneLight);
+            g.fillRoundedRectangle (cxTooth - widthTooth * 0.5f, topY, widthTooth, heightTooth, 2.0f);
+            g.setColour (boneEdge);
+            g.drawRoundedRectangle (cxTooth - widthTooth * 0.5f, topY, widthTooth, heightTooth, 2.0f, 0.9f);
         };
-        const auto upperToothHeight = [&] (float nx)
+
+        // Upper teeth hang from the top edge (sized to stay inside the opening).
+        const float upperEdgeSag = 0.75f * topCurveDepth;
+        const float upperToothH = juce::jmax (2.0f, juce::jmin (faceR * (0.07f + 0.05f * openT),
+                                                                mouthDepth - upperEdgeSag - 1.0f));
+        const int upperCount = 8;
+        const float upperToothW = mouthHalfWidth * 1.64f / (float) upperCount - 1.6f;
+        for (int i = 0; i < upperCount; ++i)
         {
-            return upperToothH * (0.88f + 0.12f * (1.0f - std::abs (nx)));
-        };
-        juce::Path teethBand;
-        constexpr int toothCurveSteps = 24;
-        for (int step = 0; step <= toothCurveSteps; ++step)
-        {
-            const float nx = juce::jmap ((float) step / (float) toothCurveSteps, -0.80f, 0.80f);
-            const float px = faceCX + nx * mouthHalfWidth;
-            const float py = upperToothTop (nx);
-            if (step == 0) teethBand.startNewSubPath (px, py);
-            else teethBand.lineTo (px, py);
-        }
-        for (int step = toothCurveSteps; step >= 0; --step)
-        {
-            const float nx = juce::jmap ((float) step / (float) toothCurveSteps, -0.80f, 0.80f);
-            teethBand.lineTo (faceCX + nx * mouthHalfWidth,
-                              upperToothTop (nx) + upperToothHeight (nx));
-        }
-        teethBand.closeSubPath();
-        g.setColour (juce::Colour (0xff4b172b).withAlpha (0.45f));
-        g.fillPath (teethBand, juce::AffineTransform::translation (0.5f, 1.3f));
-        g.setColour (juce::Colour (0xffffe9df));
-        g.fillPath (teethBand);
-        g.setColour (juce::Colours::white.withAlpha (0.52f));
-        juce::Path toothHighlight;
-        toothHighlight.startNewSubPath (faceCX - mouthHalfWidth * 0.78f, upperToothTop (-0.78f) + 1.0f);
-        for (int step = 1; step <= toothCurveSteps; ++step)
-        {
-            const float nx = juce::jmap ((float) step / (float) toothCurveSteps, -0.78f, 0.78f);
-            toothHighlight.lineTo (faceCX + nx * mouthHalfWidth, upperToothTop (nx) + 1.0f);
-        }
-        strokeRoundedPath (g, toothHighlight, juce::Colour (0xffffffff).withAlpha (0.58f), 1.0f);
-        g.setColour (juce::Colour (0xffa45c69).withAlpha (0.64f));
-        for (int seam = 1; seam < 8; ++seam)
-        {
-            const float nx = juce::jmap ((float) seam / 8.0f, -0.80f, 0.80f);
-            const float sx = faceCX + nx * mouthHalfWidth;
-            const float sy = upperToothTop (nx) + upperToothHeight (nx) * 0.80f;
-            g.drawLine (sx, upperToothTop (nx) + 1.5f, sx, sy, 1.0f);
+            const float u = -0.82f + 1.64f * ((float) i + 0.5f) / (float) upperCount;
+            const float topY = mouthTopY + upperEdgeSag * (1.0f - u * u);
+            drawTooth (faceCX + u * mouthHalfWidth, topY - 1.0f, upperToothW, upperToothH);
         }
 
-        // Six small lower teeth frame the tongue without becoming detached tiles.
-        const float lowerToothW = mouthHalfWidth * 0.105f;
-        const float lowerToothH = juce::jmax (3.0f, faceR * 0.034f);
-        for (int tooth = 0; tooth < 6; ++tooth)
+        // Lower teeth appear once the jaw is open enough.
+        if (mouthDepth > faceR * 0.26f)
         {
-            const float side = tooth < 3 ? -1.0f : 1.0f;
-            const int localTooth = tooth % 3;
-            const float position = localTooth == 0 ? 0.76f : (localTooth == 1 ? 0.59f : 0.42f);
-            const float tx = faceCX + side * mouthHalfWidth * position;
-            const float ty = mouthTopY + mouthDepth * (0.86f - 0.025f * position);
-            g.setColour (juce::Colour (0xff4c172d).withAlpha (0.40f));
-            g.fillRoundedRectangle (tx - lowerToothW * 0.5f + 0.5f, ty + 0.7f,
-                                    lowerToothW, lowerToothH, 2.0f);
-            g.setColour (juce::Colour (0xffffe8df));
-            g.fillRoundedRectangle (tx - lowerToothW * 0.5f, ty,
-                                    lowerToothW, lowerToothH, 2.0f);
-        }
-
-        if (t > 0.62f)
-        {
-            g.setColour (juce::Colour (0xffee6699));
-            g.fillRoundedRectangle (faceCX - mouthHalfWidth * 0.25f,
-                                    mouthTopY + mouthDepth * 0.72f,
-                                    mouthHalfWidth * 0.50f, faceR * 0.085f, faceR * 0.04f);
-            g.setColour (juce::Colour (0xffa73760).withAlpha (0.72f));
-            g.drawLine (faceCX, mouthTopY + mouthDepth * 0.75f,
-                        faceCX, mouthTopY + mouthDepth * 0.82f, 0.9f);
+            const float lowerToothH = faceR * (0.06f + 0.045f * openT);
+            const int lowerCount = 6;
+            const float lowerToothW = mouthHalfWidth * 1.24f / (float) lowerCount - 1.6f;
+            for (int i = 0; i < lowerCount; ++i)
+            {
+                const float u = -0.62f + 1.24f * ((float) i + 0.5f) / (float) lowerCount;
+                const float edgeY = mouthTopY + mouthDepth * (1.0f - u * u * std::fabs (u));
+                drawTooth (faceCX + u * mouthHalfWidth, edgeY - lowerToothH, lowerToothW, lowerToothH + 1.0f);
+            }
         }
     }
+
+    g.restoreState();  // end of tilted skull
+
 
     // Restore the panel coordinate system before drawing the fixed footer.
     g.restoreState();
