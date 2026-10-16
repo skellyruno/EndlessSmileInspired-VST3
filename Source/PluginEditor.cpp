@@ -32,9 +32,10 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     const float start = rotaryStartAngle;
     const float end = rotaryEndAngle;
     const float quarterTurn = juce::MathConstants<float>::halfPi;
-    const float t = juce::jlimit (0.0f, 1.0f, sliderPosProportional);
+    const float t = juce::jlimit (0.0f, 1.0f, dialDisplayPosition >= 0.0f ? dialDisplayPosition
+                                                                          : sliderPosProportional);
     const float current = start + (end - start) * t;
-    const float knobR = radius * 0.535f;
+    const float knobR = radius * 0.62f;
     const float readoutY = cy + radius + 8.0f;
 
     // ---- Static layer: identical for every slider value ---------------------
@@ -94,6 +95,19 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
             const bool light = ((int) (r / 2.2f)) % 2 == 0;
             gg.setColour ((light ? juce::Colours::white : juce::Colours::black).withAlpha (light ? 0.07f : 0.05f));
             gg.drawEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f, 0.7f);
+        }
+
+        // Two broad anisotropic reflections, as on spun brushed metal.
+        for (int k = 0; k < 2; ++k)
+        {
+            const float a0 = k == 0 ? 0.30f : 3.45f;
+            juce::Path wide, narrow;
+            wide.addPieSegment (cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f, a0, a0 + 0.62f, 0.0f);
+            narrow.addPieSegment (cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f, a0 + 0.16f, a0 + 0.42f, 0.0f);
+            gg.setColour (juce::Colours::white.withAlpha (0.08f));
+            gg.fillPath (wide);
+            gg.setColour (juce::Colours::white.withAlpha (0.10f));
+            gg.fillPath (narrow);
         }
 
         // Subtle glints on the upper edge of the metal ring.
@@ -174,46 +188,66 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     g.setColour (juce::Colours::white.withAlpha (0.45f));
     g.fillEllipse (markerX - 2.6f, markerY - 4.2f, 3.6f, 2.4f);
 
-    // Long tapered blade: broad rounded tail, widest near the middle, narrowing
-    // to a pointed tip on the +x end (which points at the current value).
+    // Large glossy black blade that overhangs the disc: a lit upper facet and a darker
+    // lower facet meet at a centre ridge, narrowing to a sharp tip on the +x end
+    // (which points at the current value).
     const float pointerAngle = current;
+    const float bladeL = 1.20f;   // overhang along the blade
+    const float bladeT = 1.10f;   // thickness
+    const auto bx = [&] (float f) { return cx + knobR * f * bladeL; };
+    const auto by = [&] (float f) { return cy + knobR * f * bladeT; };
     juce::Path grip;
-    grip.startNewSubPath (cx - knobR * 0.95f, cy - knobR * 0.26f);
-    grip.quadraticTo (cx - knobR * 0.20f, cy - knobR * 0.72f,
-                      cx + knobR * 0.55f, cy - knobR * 0.20f);
-    grip.lineTo (cx + knobR * 0.98f, cy + knobR * 0.02f);
-    grip.lineTo (cx + knobR * 0.50f, cy + knobR * 0.28f);
-    grip.quadraticTo (cx - knobR * 0.25f, cy + knobR * 0.64f,
-                      cx - knobR * 0.95f, cy + knobR * 0.22f);
+    grip.startNewSubPath (bx (-0.95f), by (-0.26f));
+    grip.quadraticTo (bx (-0.20f), by (-0.72f), bx (0.55f), by (-0.20f));
+    grip.lineTo (bx (0.98f), by (0.02f));
+    grip.lineTo (bx (0.50f), by (0.28f));
+    grip.quadraticTo (bx (-0.25f), by (0.64f), bx (-0.95f), by (0.22f));
     grip.closeSubPath();
-    grip.applyTransform (juce::AffineTransform::rotation (pointerAngle - quarterTurn, cx, cy));
-    g.setColour (juce::Colours::black.withAlpha (0.62f));
-    g.fillPath (grip, juce::AffineTransform::translation (1.8f, 2.4f));
-    juce::ColourGradient gripGradient (juce::Colour (0xff3a3c40), cx - knobR * 0.3f, cy - knobR * 0.35f,
-                                       juce::Colour (0xff050607), cx + knobR * 0.22f, cy + knobR * 0.45f, false);
-    gripGradient.addColour (0.28, juce::Colour (0xff242629));
-    gripGradient.addColour (0.51, juce::Colour (0xff111315));
-    g.setGradientFill (gripGradient);
+    juce::Path gripUpper;
+    gripUpper.startNewSubPath (bx (-0.95f), by (-0.26f));
+    gripUpper.quadraticTo (bx (-0.20f), by (-0.72f), bx (0.55f), by (-0.20f));
+    gripUpper.lineTo (bx (0.98f), by (0.02f));
+    gripUpper.lineTo (bx (-0.95f), by (-0.02f));
+    gripUpper.closeSubPath();
+    const auto rotateBlade = juce::AffineTransform::rotation (pointerAngle - quarterTurn, cx, cy);
+    grip.applyTransform (rotateBlade);
+    gripUpper.applyTransform (rotateBlade);
+
+    g.setColour (juce::Colours::black.withAlpha (0.60f));
+    g.fillPath (grip, juce::AffineTransform::translation (2.2f, 3.4f));
+    juce::ColourGradient lowerFacet (juce::Colour (0xff1b1c1f), cx - knobR * 0.3f, cy - knobR * 0.2f,
+                                     juce::Colour (0xff030304), cx + knobR * 0.35f, cy + knobR * 0.7f, false);
+    g.setGradientFill (lowerFacet);
     g.fillPath (grip);
-    g.setColour (juce::Colour (0xff6b6c70).withAlpha (0.88f));
-    g.strokePath (grip, juce::PathStrokeType (0.8f));
+    juce::ColourGradient upperFacet (juce::Colour (0xff5a5d63), cx - knobR * 0.5f, cy - knobR * 0.7f,
+                                     juce::Colour (0xff131517), cx + knobR * 0.4f, cy + knobR * 0.1f, false);
+    g.setGradientFill (upperFacet);
+    g.fillPath (gripUpper);
+    g.setColour (juce::Colour (0xff85878c).withAlpha (0.90f));
+    g.strokePath (grip, juce::PathStrokeType (0.9f));
+
+    // Bright ridge line down the middle of the blade.
+    juce::Path ridge;
+    ridge.startNewSubPath (bx (-0.90f), by (-0.015f));
+    ridge.lineTo (bx (0.90f), by (0.012f));
+    ridge.applyTransform (rotateBlade);
+    strokeRoundedPath (g, ridge, juce::Colours::white.withAlpha (0.30f), 1.0f);
 
     // Light tip facet so the pointing end is unmistakable.
     juce::Path gripTip;
-    gripTip.startNewSubPath (cx + knobR * 0.98f, cy + knobR * 0.02f);
-    gripTip.lineTo (cx + knobR * 0.72f, cy - knobR * 0.10f);
-    gripTip.lineTo (cx + knobR * 0.74f, cy + knobR * 0.14f);
+    gripTip.startNewSubPath (bx (0.98f), by (0.02f));
+    gripTip.lineTo (bx (0.72f), by (-0.10f));
+    gripTip.lineTo (bx (0.74f), by (0.14f));
     gripTip.closeSubPath();
-    gripTip.applyTransform (juce::AffineTransform::rotation (pointerAngle - quarterTurn, cx, cy));
+    gripTip.applyTransform (rotateBlade);
     g.setColour (juce::Colour (0xffdadbdd).withAlpha (0.92f));
     g.fillPath (gripTip);
 
     // Curved specular ridge along the blade.
     juce::Path gripGlint;
-    gripGlint.startNewSubPath (cx - knobR * 0.72f, cy - knobR * 0.10f);
-    gripGlint.quadraticTo (cx - knobR * 0.10f, cy - knobR * 0.32f,
-                           cx + knobR * 0.58f, cy - knobR * 0.06f);
-    gripGlint.applyTransform (juce::AffineTransform::rotation (pointerAngle - quarterTurn, cx, cy));
+    gripGlint.startNewSubPath (bx (-0.72f), by (-0.12f));
+    gripGlint.quadraticTo (bx (-0.10f), by (-0.36f), bx (0.58f), by (-0.09f));
+    gripGlint.applyTransform (rotateBlade);
     strokeRoundedPath (g, gripGlint, juce::Colours::white.withAlpha (0.50f), 2.2f);
     g.setColour (juce::Colour (0xffa5a8ab).withAlpha (0.92f));
     g.fillEllipse (cx - 2.8f, cy - 2.8f, 5.6f, 5.6f);
@@ -239,20 +273,20 @@ void EndlessSmileInspiredLookAndFeel::drawComboBox (juce::Graphics& g, int width
         : (tabIndex <= 3 ? "MEDIUM" : (tabIndex <= 5 ? "HARD" : (tabIndex == 6 ? "EXTREME" : "GRAVEYARD")));
     const juce::Colour tabColour = tabIndex <= 1 ? juce::Colour (0xffffa13b)
         : (tabIndex <= 3 ? juce::Colour (0xff46b8d5)
-        : (tabIndex <= 5 ? juce::Colour (0xfff04491)
-        : (tabIndex == 6 ? juce::Colour (0xffd84986) : juce::Colour (0xff7be0a6))));
+        : (tabIndex <= 5 ? juce::Colour (0xffff5a4d)
+        : (tabIndex == 6 ? juce::Colour (0xffb06cff) : juce::Colour (0xffbff7d0))));
 
     // Cast-metal pink housing and lower shadow.
     g.setColour (juce::Colours::black.withAlpha (0.34f));
     g.fillRoundedRectangle (3.0f, 4.0f, (float) width - 6.0f, (float) height - 5.0f, 5.0f);
-    juce::ColourGradient casing (juce::Colour (0xffff79aa), 0.0f, 0.0f,
-                                  juce::Colour (0xffbd3c70), (float) width, (float) height, false);
-    casing.addColour (0.42, juce::Colour (0xffed4c8e));
+    juce::ColourGradient casing (juce::Colour (0xff7ee89a), 0.0f, 0.0f,
+                                  juce::Colour (0xff1c7a42), (float) width, (float) height, false);
+    casing.addColour (0.42, juce::Colour (0xff35b862));
     g.setGradientFill (casing);
     g.fillRoundedRectangle (1.0f, 0.5f, (float) width - 4.0f, (float) height - 7.0f, 5.5f);
-    g.setColour (juce::Colour (0xffffb2cd).withAlpha (0.82f));
+    g.setColour (juce::Colour (0xffc3f7d3).withAlpha (0.82f));
     g.drawRoundedRectangle (1.5f, 1.0f, (float) width - 5.0f, (float) height - 8.0f, 5.0f, 1.0f);
-    g.setColour (juce::Colour (0xff8c244e).withAlpha (0.85f));
+    g.setColour (juce::Colour (0xff0f4a28).withAlpha (0.85f));
     g.drawRoundedRectangle (4.0f, 3.5f, (float) width - 10.0f, (float) height - 13.0f, 3.0f, 1.0f);
 
     // Cream paper window, gently inset into the casing.
@@ -273,16 +307,16 @@ void EndlessSmileInspiredLookAndFeel::drawComboBox (juce::Graphics& g, int width
     const float travel = juce::jmax (1.0f, (float) width - 2.0f * tabMargin);
     const float tabCentre = tabMargin + cassetteTabPosition * travel;
     const float tabX = juce::jlimit (14.0f, (float) width - tabWidth - 14.0f, tabCentre - tabWidth * 0.5f);
-    g.setColour (juce::Colour (0xff7d2147).withAlpha (0.35f));
+    g.setColour (juce::Colour (0xff134a2a).withAlpha (0.35f));
     g.fillRect (tabMargin, 10.5f, travel, 1.0f);
     for (int notch = 0; notch < numPresets; ++notch)
     {
         const float nx = tabMargin + travel * (float) notch / (float) (numPresets - 1);
-        g.setColour (juce::Colour (0xff7d2147).withAlpha (0.75f));
+        g.setColour (juce::Colour (0xff134a2a).withAlpha (0.75f));
         g.fillEllipse (nx - 1.6f, 9.4f, 3.2f, 3.2f);
     }
 
-    g.setColour (juce::Colour (0xff6e1c3c).withAlpha (0.55f));
+    g.setColour (juce::Colour (0xff0b3a1d).withAlpha (0.55f));
     g.fillRoundedRectangle (tabX + 1.5f, 4.5f, tabWidth + 2.0f, 16.5f, 1.5f);
     g.setColour (juce::Colour (0xff2b2b2e));
     g.fillRoundedRectangle (tabX, 3.0f, tabWidth, 16.0f, 1.5f);
@@ -296,9 +330,9 @@ void EndlessSmileInspiredLookAndFeel::drawComboBox (juce::Graphics& g, int width
     // Rivets and an understated down-chevron remain clear at small sizes.
     for (const float sx : { 7.0f, (float) width - 9.0f })
     {
-        g.setColour (juce::Colour (0xff8a244a));
+        g.setColour (juce::Colour (0xff0f4a28));
         g.fillEllipse (sx - 1.7f, (float) height * 0.53f - 1.7f, 3.4f, 3.4f);
-        g.setColour (juce::Colour (0xffffd1e1));
+        g.setColour (juce::Colour (0xffd9ffe6));
         g.fillEllipse (sx - 0.7f, (float) height * 0.53f - 1.1f, 1.3f, 1.3f);
     }
     const float arrowCX = (float) width - 25.0f;
@@ -349,9 +383,9 @@ void EndlessSmileInspiredLookAndFeel::drawButtonBackground (juce::Graphics& g, j
     arrow.closeSubPath();
     g.setColour (juce::Colours::black.withAlpha (0.32f));
     g.fillPath (arrow, juce::AffineTransform::translation (1.0f, 2.0f));
-    const juce::Colour arrowTop = down ? juce::Colour (0xffe8789f)
+    const juce::Colour arrowTop = down ? juce::Colour (0xffff9a3a)
                                        : (highlighted ? juce::Colour (0xffffcb78) : juce::Colour (0xffffb04d));
-    const juce::Colour arrowBottom = down ? juce::Colour (0xffc94577)
+    const juce::Colour arrowBottom = down ? juce::Colour (0xffd9560a)
                                           : (highlighted ? juce::Colour (0xffff9a2a) : juce::Colour (0xfff0780f));
     g.setGradientFill (juce::ColourGradient (arrowTop, 0.0f, b.getY(),
                                              arrowBottom, 0.0f, b.getBottom(), false));
@@ -375,6 +409,10 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     setResizable (true, true);
     setResizeLimits (680, 390, 1400, 790);
     setLookAndFeel (&lookAndFeel);
+    lookAndFeel.setColour (juce::PopupMenu::backgroundColourId, juce::Colour (0xff0e1913));
+    lookAndFeel.setColour (juce::PopupMenu::textColourId, juce::Colour (0xffe9e2cf));
+    lookAndFeel.setColour (juce::PopupMenu::highlightedBackgroundColourId, juce::Colour (0xff2fae5a));
+    lookAndFeel.setColour (juce::PopupMenu::highlightedTextColourId, juce::Colour (0xff08140c));
 
     intensity.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     intensity.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
@@ -406,9 +444,9 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     for (int i = 0; i < presetNames.size(); ++i)
         preset.addItem (presetNames[i], i + 1);
     preset.setJustificationType (juce::Justification::centredLeft);
-    preset.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xffed4c8e));
+    preset.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff35b862));
     preset.setColour (juce::ComboBox::textColourId, juce::Colour (0xff30252b));
-    preset.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xff9f2e59));
+    preset.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xff17622f));
     preset.setColour (juce::ComboBox::arrowColourId, juce::Colour (0xff30252b));
     preset.setTooltip ("Choose a build-up profile. Previous/next arrows also cycle the presets.");
     preset.setWantsKeyboardFocus (true);
@@ -467,6 +505,9 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     preset.onChange();
     tabSlide = (float) (juce::jmax (1, preset.getSelectedId()) - 1) / (float) (numPresets - 1);
     lookAndFeel.setCassetteTabPosition (tabSlide);
+    knobDisplay = (float) intensity.valueToProportionOfLength (intensity.getValue());
+    lookAndFeel.setDialDisplayPosition (knobDisplay);
+    buildFogTexture();
 
     // The mascot follows the knob instantly: no easing, repaint right away.
     intensity.onValueChange = [this]
@@ -907,6 +948,68 @@ void EndlessSmileInspiredAudioProcessorEditor::resized()
     nextPresetButton.setBounds (leftMargin + controlWidth - 44, presetY + 9, 62, 52);
 }
 
+void EndlessSmileInspiredAudioProcessorEditor::buildFogTexture()
+{
+    // A small, horizontally tileable fog texture. Every u-dependent term uses a whole
+    // number of cycles, so the left and right edges meet seamlessly when it scrolls.
+    constexpr int fw = 512;
+    constexpr int fh = 96;
+    const float twoPi = juce::MathConstants<float>::twoPi;
+    fogTexture = juce::Image (juce::Image::ARGB, fw, fh, true);
+    juce::Image::BitmapData data (fogTexture, juce::Image::BitmapData::writeOnly);
+    for (int y = 0; y < fh; ++y)
+    {
+        const float v = (float) y / (float) fh;
+        const float edge = std::sin (juce::MathConstants<float>::pi * v);
+        for (int x = 0; x < fw; ++x)
+        {
+            const float u = (float) x / (float) fw;
+            float n = 0.50f * std::sin (twoPi * (2.0f * u + 0.10f * std::sin (twoPi * (v + 0.3f))) + 1.3f);
+            n += 0.32f * std::sin (twoPi * (3.0f * u + 0.15f) + 4.0f * v + 0.7f);
+            n += 0.22f * std::sin (twoPi * (5.0f * u) - 5.0f * v + 2.1f);
+            n += 0.15f * std::sin (twoPi * (8.0f * u + 0.37f) + 7.0f * v);
+            float d = juce::jlimit (0.0f, 1.0f, 0.5f + 0.5f * n);
+            d = d * d * (3.0f - 2.0f * d);
+            data.setPixelColour (x, y, juce::Colour::fromFloatRGBA (0.66f, 0.74f, 0.80f,
+                                                                    juce::jlimit (0.0f, 1.0f, d * edge)));
+        }
+    }
+}
+
+juce::Rectangle<int> EndlessSmileInspiredAudioProcessorEditor::getFogBottomBand() const
+{
+    return { 0, juce::roundToInt ((float) getHeight() * 0.60f),
+             getWidth(), juce::roundToInt ((float) getHeight() * 0.38f) };
+}
+
+juce::Rectangle<int> EndlessSmileInspiredAudioProcessorEditor::getFogTopBand() const
+{
+    return { 0, juce::roundToInt ((float) getHeight() * 0.04f),
+             getWidth(), juce::roundToInt ((float) getHeight() * 0.20f) };
+}
+
+void EndlessSmileInspiredAudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    if (! fogTexture.isValid() || getWidth() <= 0)
+        return;
+
+    // Two drifting layers at different speeds and strengths, drawn over everything so
+    // the mist passes in front of the controls and the skeleton as well as behind them.
+    const float w = (float) getWidth();
+    const auto drawLayer = [&] (juce::Rectangle<int> band, float offset, float opacity)
+    {
+        const float shift = offset * w;
+        const auto bandF = band.toFloat();
+        g.setOpacity (opacity);
+        g.drawImage (fogTexture, juce::Rectangle<float> (-shift, bandF.getY(), w, bandF.getHeight()),
+                     juce::RectanglePlacement::stretchToFit);
+        g.drawImage (fogTexture, juce::Rectangle<float> (w - shift, bandF.getY(), w, bandF.getHeight()),
+                     juce::RectanglePlacement::stretchToFit);
+    };
+    drawLayer (getFogBottomBand(), fogOffsetA, 0.55f);
+    drawLayer (getFogTopBand(), fogOffsetB, 0.30f);
+}
+
 void EndlessSmileInspiredAudioProcessorEditor::rebuildBackgroundCache()
 {
     if (getWidth() <= 0 || getHeight() <= 0)
@@ -923,6 +1026,11 @@ void EndlessSmileInspiredAudioProcessorEditor::rebuildBackgroundCache()
     sky.addColour (0.55, juce::Colour (0xff0d121a));
     g.setGradientFill (sky);
     g.fillAll();
+
+    // Sickly green mist glowing up from the horizon.
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff1fbf6a).withAlpha (0.0f), 0.0f, h * 0.50f,
+                                             juce::Colour (0xff1fbf6a).withAlpha (0.22f), 0.0f, h * 0.90f, false));
+    g.fillRect (0.0f, h * 0.50f, w, h * 0.50f);
 
     juce::Random random (91);
     for (int i = 0; i < 120; ++i)
@@ -966,11 +1074,97 @@ void EndlessSmileInspiredAudioProcessorEditor::rebuildBackgroundCache()
     drawBat (moonX - moonR * 0.9f, moonY - moonR * 1.5f, h * 0.014f);
     drawBat (moonX + moonR * 2.5f, moonY + moonR * 0.9f, h * 0.012f);
 
+    const float baseGround = h * 0.91f;
+
+    // Faint ghosts drifting in the dark.
+    const auto drawGhost = [&g] (float gx, float gy, float gs, float alpha)
+    {
+        juce::Path ghost;
+        ghost.startNewSubPath (gx - gs * 0.5f, gy + gs * 0.9f);
+        ghost.lineTo (gx - gs * 0.5f, gy);
+        ghost.quadraticTo (gx - gs * 0.5f, gy - gs * 0.62f, gx, gy - gs * 0.62f);
+        ghost.quadraticTo (gx + gs * 0.5f, gy - gs * 0.62f, gx + gs * 0.5f, gy);
+        ghost.lineTo (gx + gs * 0.5f, gy + gs * 0.9f);
+        ghost.quadraticTo (gx + gs * 0.33f, gy + gs * 0.72f, gx + gs * 0.17f, gy + gs * 0.9f);
+        ghost.quadraticTo (gx, gy + gs * 0.72f, gx - gs * 0.17f, gy + gs * 0.9f);
+        ghost.quadraticTo (gx - gs * 0.33f, gy + gs * 0.72f, gx - gs * 0.5f, gy + gs * 0.9f);
+        ghost.closeSubPath();
+        g.setColour (juce::Colour (0xffcfe9ff).withAlpha (alpha));
+        g.fillPath (ghost);
+        g.setColour (juce::Colour (0xff05070b).withAlpha (juce::jmin (1.0f, alpha * 4.0f)));
+        g.fillEllipse (gx - gs * 0.22f, gy - gs * 0.16f, gs * 0.12f, gs * 0.17f);
+        g.fillEllipse (gx + gs * 0.10f, gy - gs * 0.16f, gs * 0.12f, gs * 0.17f);
+        g.fillEllipse (gx - gs * 0.07f, gy + gs * 0.10f, gs * 0.14f, gs * 0.20f);
+    };
+    drawGhost (w * 0.225f, h * 0.30f, h * 0.075f, 0.13f);
+    drawGhost (w * 0.135f, h * 0.52f, h * 0.055f, 0.10f);
+
+    // Haunted house on the rise between the cassette and the skeleton.
+    {
+        const float hx = w * 0.470f;
+        const float hw = w * 0.075f;
+        const float hh = h * 0.105f;
+        const float hy = baseGround + 4.0f - hh;
+        const float towerW = w * 0.022f;
+        const float towerH = h * 0.175f;
+        const float towerX = hx + hw - towerW * 0.4f;
+        const float towerY = baseGround + 4.0f - towerH;
+        const juce::Colour silhouette (0xff04060a);
+        g.setColour (silhouette);
+        g.fillRect (hx, hy, hw, hh);
+        juce::Path roof;
+        roof.startNewSubPath (hx - hw * 0.06f, hy);
+        roof.lineTo (hx + hw * 0.5f, hy - hh * 0.55f);
+        roof.lineTo (hx + hw * 1.06f, hy);
+        roof.closeSubPath();
+        g.fillPath (roof);
+        g.fillRect (towerX, towerY, towerW, towerH);
+        juce::Path spire;
+        spire.startNewSubPath (towerX - towerW * 0.18f, towerY);
+        spire.lineTo (towerX + towerW * 0.5f, towerY - towerH * 0.30f);
+        spire.lineTo (towerX + towerW * 1.18f, towerY);
+        spire.closeSubPath();
+        g.fillPath (spire);
+
+        const auto glowWindow = [&g] (float wx, float wy, float ww, float wh)
+        {
+            g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd8ff7a).withAlpha (0.30f), wx + ww * 0.5f, wy + wh * 0.5f,
+                                                     juce::Colour (0xffd8ff7a).withAlpha (0.0f), wx + ww * 0.5f + ww * 2.6f, wy + wh * 0.5f, true));
+            g.fillEllipse (wx - ww * 2.1f, wy - wh * 1.6f, ww * 5.2f, wh * 4.2f);
+            g.setColour (juce::Colour (0xffe9ff9a).withAlpha (0.92f));
+            g.fillRect (wx, wy, ww, wh);
+        };
+        glowWindow (hx + hw * 0.18f, hy + hh * 0.25f, hw * 0.16f, hh * 0.26f);
+        glowWindow (hx + hw * 0.62f, hy + hh * 0.25f, hw * 0.16f, hh * 0.26f);
+        glowWindow (towerX + towerW * 0.30f, towerY + towerH * 0.16f, towerW * 0.40f, towerH * 0.12f);
+    }
+
+    // Twisted dead trees framing the scene.
+    const auto branch = [&g, &random] (auto&& self, float bx, float by, float angle,
+                                       float len, float thick, int depth) -> void
+    {
+        const float ex = bx + std::sin (angle) * len;
+        const float ey = by - std::cos (angle) * len;
+        g.setColour (juce::Colour (0xff05070a));
+        g.drawLine (bx, by, ex, ey, thick);
+        if (depth <= 0 || len < 6.0f)
+            return;
+        const int children = depth > 2 ? 2 : (random.nextBool() ? 2 : 1);
+        for (int c = 0; c < children; ++c)
+        {
+            const float spread = (c == 0 ? -1.0f : 1.0f) * (0.35f + random.nextFloat() * 0.55f);
+            self (self, ex, ey, angle + spread, len * (0.62f + random.nextFloat() * 0.18f),
+                  thick * 0.66f, depth - 1);
+        }
+    };
+    branch (branch, w * 0.020f, baseGround + 8.0f, 0.10f, h * 0.20f, 7.0f, 6);
+    branch (branch, w * 0.985f, baseGround + 8.0f, -0.12f, h * 0.17f, 6.0f, 6);
+
     // Tombstones and crosses, then the ground so their bases sink into it.
     struct Stone { float x, width, height; int kind; };
     const Stone stones[] = {
         { 0.060f, 0.040f, 0.085f, 0 }, { 0.170f, 0.030f, 0.070f, 1 }, { 0.300f, 0.042f, 0.090f, 0 },
-        { 0.420f, 0.034f, 0.075f, 2 }, { 0.540f, 0.044f, 0.100f, 0 }, { 0.592f, 0.032f, 0.072f, 1 },
+        { 0.420f, 0.034f, 0.075f, 2 }, { 0.590f, 0.034f, 0.074f, 1 },
         { 0.905f, 0.040f, 0.110f, 0 }, { 0.948f, 0.030f, 0.078f, 2 }, { 0.975f, 0.026f, 0.066f, 1 }
     };
     const float groundY = h * 0.91f;
@@ -1028,6 +1222,51 @@ void EndlessSmileInspiredAudioProcessorEditor::rebuildBackgroundCache()
         g.fillRect (0.0f, fy - fh * 0.5f, w, fh);
     }
 
+    // Cobweb in the top-left corner.
+    {
+        const float webCx = 16.0f, webCy = 16.0f, webR = h * 0.17f;
+        const float quarter = juce::MathConstants<float>::halfPi;
+        g.setColour (juce::Colour (0xffd9e4f0).withAlpha (0.24f));
+        for (int spoke = 0; spoke <= 6; ++spoke)
+        {
+            const float a = (float) spoke * quarter / 6.0f;
+            g.drawLine (webCx, webCy, webCx + std::cos (a) * webR, webCy + std::sin (a) * webR, 0.8f);
+        }
+        for (int ring = 1; ring <= 4; ++ring)
+        {
+            const float r = webR * (float) ring / 4.5f;
+            juce::Path strand;
+            for (int spoke = 0; spoke <= 6; ++spoke)
+            {
+                const float a = (float) spoke * quarter / 6.0f;
+                const float px = webCx + std::cos (a) * r;
+                const float py = webCy + std::sin (a) * r;
+                if (spoke == 0)
+                    strand.startNewSubPath (px, py);
+                else
+                {
+                    const float am = a - quarter / 12.0f;
+                    strand.quadraticTo (webCx + std::cos (am) * r * 0.90f, webCy + std::sin (am) * r * 0.90f, px, py);
+                }
+            }
+            g.strokePath (strand, juce::PathStrokeType (0.8f));
+        }
+    }
+
+    // Something watching from the dark.
+    {
+        const float ex = w * 0.085f, ey = h * 0.30f, gap = h * 0.028f;
+        for (int eye = -1; eye <= 1; eye += 2)
+        {
+            const float px = ex + (float) eye * gap;
+            g.setGradientFill (juce::ColourGradient (juce::Colour (0xffcfff3a).withAlpha (0.35f), px, ey,
+                                                     juce::Colour (0xffcfff3a).withAlpha (0.0f), px + h * 0.030f, ey, true));
+            g.fillEllipse (px - h * 0.030f, ey - h * 0.030f, h * 0.060f, h * 0.060f);
+            g.setColour (juce::Colour (0xffe6ff6a));
+            g.fillEllipse (px - h * 0.008f, ey - h * 0.005f, h * 0.016f, h * 0.011f);
+        }
+    }
+
     // Vignette, then a little deterministic grain.
     g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, w * 0.5f, h * 0.45f,
                                              juce::Colours::black.withAlpha (0.55f), 0.0f, 0.0f, true));
@@ -1062,6 +1301,29 @@ void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
             tabSlide = tabTarget;
         lookAndFeel.setCassetteTabPosition (tabSlide);
         preset.repaint();
+    }
+
+    // The dial glides toward the real value (cosmetic only: the number and the
+    // parameter are always exact), which hides the steps between mouse movements.
+    const float knobTarget = (float) intensity.valueToProportionOfLength (intensity.getValue());
+    if (knobDisplay != knobTarget)
+    {
+        knobDisplay += (knobTarget - knobDisplay) * 0.42f;
+        if (std::abs (knobTarget - knobDisplay) < 0.0008f)
+            knobDisplay = knobTarget;
+        lookAndFeel.setDialDisplayPosition (knobDisplay);
+        intensity.repaint();
+    }
+
+    // Slow fog drift; the bands are repainted at 20 Hz, which is plenty for slow mist.
+    fogOffsetA += 0.020f / 60.0f;
+    fogOffsetB += 0.034f / 60.0f;
+    if (fogOffsetA >= 1.0f) fogOffsetA -= 1.0f;
+    if (fogOffsetB >= 1.0f) fogOffsetB -= 1.0f;
+    if ((animationFrame % 3) == 0)
+    {
+        repaint (getFogBottomBand());
+        repaint (getFogTopBand());
     }
 
     const float previousIntensity = animatedIntensity;
