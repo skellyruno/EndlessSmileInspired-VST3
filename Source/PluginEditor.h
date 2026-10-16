@@ -31,6 +31,8 @@ public:
 
 private:
     void timerCallback() override;
+    void rebuildBackgroundCache();
+    juce::Rectangle<int> getCharacterBounds() const;
 
     EndlessSmileInspiredAudioProcessor& processor;
     // Declare the LookAndFeel before the controls so it outlives them.
@@ -45,6 +47,9 @@ private:
 
     // UI-only animation state. Values are smoothed on the message thread so the
     // character feels elastic when the host/automation moves the intensity knob.
+    // The static panel (gradient + grain) is rendered once per size, not every frame.
+    juce::Image backgroundCache;
+
     float animationPhase = 0.0f;
     float animatedIntensity = 0.0f;
     float blinkAmount = 0.0f;
