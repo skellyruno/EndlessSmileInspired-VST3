@@ -49,5 +49,12 @@ private:
     float riserPhase = 0.0f;
     float riserRamp = 0.0f;                 // 0..1 position in the Hard-preset riser loop
 
+    // Graveyard presets: resonant band-pass voices plus slow LFOs and oscillator phases.
+    std::array<juce::dsp::StateVariableTPTFilter<float>, 2> scaryBandFilters;
+    float lfoPhaseA = 0.0f, lfoPhaseB = 0.0f, lfoPhaseC = 0.0f, lfoPhaseD = 0.0f;
+    float vibratoPhase = 0.0f, scarePhase = 0.0f, scarePhase2 = 0.0f;
+    float clickEnv[2] { 0.0f, 0.0f };       // rattling-bones click envelopes
+    float feedbackDamp[2] { 0.0f, 0.0f };   // low-pass inside the ghost echo's feedback path
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EndlessSmileInspiredAudioProcessor)
 };

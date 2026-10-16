@@ -3,6 +3,9 @@
 
 namespace
 {
+    // Presets 1-7 are the original seven; 8-12 are the graveyard presets.
+    constexpr int numPresets = 12;
+
 
     void strokeRoundedPath (juce::Graphics& g, const juce::Path& path,
                             juce::Colour colour, float thickness)
@@ -119,7 +122,7 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
         gg.setColour (juce::Colour (0xffd4d0d0).withAlpha (0.82f));
         gg.drawRoundedRectangle (cx - 45.0f, readoutY, 90.0f, 24.0f, 1.0f, 0.9f);
 
-        gg.setColour (juce::Colour (0xff171719));
+        gg.setColour (juce::Colour (0xffe9e2cf).withAlpha (0.94f));
         gg.setFont (juce::Font (juce::FontOptions (14.5f, juce::Font::bold)));
         gg.drawText ("INTENSITY",
                      juce::Rectangle<int> (juce::roundToInt (cx - 72.0f),
@@ -227,12 +230,17 @@ void EndlessSmileInspiredLookAndFeel::drawComboBox (juce::Graphics& g, int width
     bool isButtonDown, int buttonX, int buttonY, int buttonW, int buttonH, juce::ComboBox& box)
 {
     juce::ignoreUnused (isButtonDown, buttonX, buttonY, buttonW, buttonH);
-    const int selected = box.getSelectedId();
-    const juce::String category = selected <= 2 ? "SOFT"
-        : (selected <= 4 ? "MEDIUM" : (selected <= 6 ? "HARD" : "EXTREME"));
-    const juce::Colour tabColour = selected <= 2 ? juce::Colour (0xffffa13b)
-        : (selected <= 4 ? juce::Colour (0xff46b8d5)
-        : (selected <= 6 ? juce::Colour (0xfff04491) : juce::Colour (0xffd84986)));
+    juce::ignoreUnused (box);
+    // The category follows the sliding tab itself, so the label changes as the tab
+    // passes each preset's notch rather than the instant a preset is chosen.
+    const int tabIndex = juce::jlimit (0, numPresets - 1,
+                                       juce::roundToInt (cassetteTabPosition * (float) (numPresets - 1)));
+    const juce::String category = tabIndex <= 1 ? "SOFT"
+        : (tabIndex <= 3 ? "MEDIUM" : (tabIndex <= 5 ? "HARD" : (tabIndex == 6 ? "EXTREME" : "GRAVEYARD")));
+    const juce::Colour tabColour = tabIndex <= 1 ? juce::Colour (0xffffa13b)
+        : (tabIndex <= 3 ? juce::Colour (0xff46b8d5)
+        : (tabIndex <= 5 ? juce::Colour (0xfff04491)
+        : (tabIndex == 6 ? juce::Colour (0xffd84986) : juce::Colour (0xff7be0a6))));
 
     // Cast-metal pink housing and lower shadow.
     g.setColour (juce::Colours::black.withAlpha (0.34f));
@@ -257,18 +265,19 @@ void EndlessSmileInspiredLookAndFeel::drawComboBox (juce::Graphics& g, int width
     g.drawRoundedRectangle (9.0f, 22.0f, (float) width - 20.0f, (float) height - 31.0f, 3.0f, 0.8f);
 
     // The category is a separate tab, like the original labelled preset cassette.
-    const float tabWidth = category == "EXTREME" ? 79.0f : (category == "MEDIUM" ? 72.0f : 56.0f);
-    // The tab rides along a seven-notch timeline, one notch per preset, so it
-    // slides left to right as you step from the first preset to the last.
-    const float tabMargin = 52.0f;
+    // One fixed width for every category, so the tab never changes size as it slides.
+    const float tabWidth = 80.0f;
+    // The tab rides along a timeline with one notch per preset, so it slides
+    // left to right as you step from the first preset to the last.
+    const float tabMargin = 56.0f;
     const float travel = juce::jmax (1.0f, (float) width - 2.0f * tabMargin);
     const float tabCentre = tabMargin + cassetteTabPosition * travel;
     const float tabX = juce::jlimit (14.0f, (float) width - tabWidth - 14.0f, tabCentre - tabWidth * 0.5f);
     g.setColour (juce::Colour (0xff7d2147).withAlpha (0.35f));
     g.fillRect (tabMargin, 10.5f, travel, 1.0f);
-    for (int notch = 0; notch < 7; ++notch)
+    for (int notch = 0; notch < numPresets; ++notch)
     {
-        const float nx = tabMargin + travel * (float) notch / 6.0f;
+        const float nx = tabMargin + travel * (float) notch / (float) (numPresets - 1);
         g.setColour (juce::Colour (0xff7d2147).withAlpha (0.75f));
         g.fillEllipse (nx - 1.6f, 9.4f, 3.2f, 3.2f);
     }
@@ -387,7 +396,12 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
         "FACE MELTING JOY",
         "SMACK YOU IN THE FACE",
         "BROKEN TEETH",
-        "DADA DYNAMITE"
+        "DADA DYNAMITE",
+        "MIDNIGHT HOWL",
+        "BANSHEE SCREAM",
+        "GHOST WHISPER",
+        "RATTLING BONES",
+        "CRYPT DRONE"
     };
     for (int i = 0; i < presetNames.size(); ++i)
         preset.addItem (presetNames[i], i + 1);
@@ -396,7 +410,7 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     preset.setColour (juce::ComboBox::textColourId, juce::Colour (0xff30252b));
     preset.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xff9f2e59));
     preset.setColour (juce::ComboBox::arrowColourId, juce::Colour (0xff30252b));
-    preset.setTooltip ("Choose a build-up profile. Previous/next arrows also cycle the seven presets.");
+    preset.setTooltip ("Choose a build-up profile. Previous/next arrows also cycle the presets.");
     preset.setWantsKeyboardFocus (true);
     preset.onChange = [this]
     {
@@ -410,7 +424,12 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
             case 5: preset.setTooltip ("Smack You in the Face - Hard: reverb, full high-pass, noise and riser."); break;
             case 6: preset.setTooltip ("Broken Teeth - Hard: all hard effects plus delay."); break;
             case 7: preset.setTooltip ("Dada Dynamite - Extreme: all effects; noise and riser follow intensity."); break;
-            default: preset.setTooltip ("Choose one of the seven build-up profiles."); break;
+            case 8: preset.setTooltip ("Midnight Howl - Graveyard: wind howling through a drifting resonant band."); break;
+            case 9: preset.setTooltip ("Banshee Scream - Graveyard: a rising, shrieking voice with echo."); break;
+            case 10: preset.setTooltip ("Ghost Whisper - Graveyard: breathy whispers and a haunting echo."); break;
+            case 11: preset.setTooltip ("Rattling Bones - Graveyard: dry bone clicks that get denser as intensity rises."); break;
+            case 12: preset.setTooltip ("Crypt Drone - Graveyard: a low, growing drone with a moving vowel."); break;
+            default: preset.setTooltip ("Choose one of the build-up profiles."); break;
         }
     };
     addAndMakeVisible (preset);
@@ -422,7 +441,7 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     previousPresetButton.onClick = [this]
     {
         const int id = preset.getSelectedId();
-        preset.setSelectedId (id <= 1 ? 7 : id - 1, juce::sendNotificationSync);
+        preset.setSelectedId (id <= 1 ? numPresets : id - 1, juce::sendNotificationSync);
     };
     addAndMakeVisible (previousPresetButton);
 
@@ -433,7 +452,7 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     nextPresetButton.onClick = [this]
     {
         const int id = preset.getSelectedId();
-        preset.setSelectedId (id >= 7 ? 1 : id + 1, juce::sendNotificationSync);
+        preset.setSelectedId (id >= numPresets ? 1 : id + 1, juce::sendNotificationSync);
     };
     addAndMakeVisible (nextPresetButton);
 
@@ -446,9 +465,16 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     // whenever the editor is reopened.
     animatedIntensity = juce::jlimit (0.0f, 1.0f, (float) intensity.getValue() / 110.0f);
     preset.onChange();
-    tabSlide = (float) (juce::jmax (1, preset.getSelectedId()) - 1) / 6.0f;
+    tabSlide = (float) (juce::jmax (1, preset.getSelectedId()) - 1) / (float) (numPresets - 1);
     lookAndFeel.setCassetteTabPosition (tabSlide);
-    startTimerHz (30);
+
+    // The mascot follows the knob instantly: no easing, repaint right away.
+    intensity.onValueChange = [this]
+    {
+        animatedIntensity = juce::jlimit (0.0f, 1.0f, (float) intensity.getValue() / 110.0f);
+        repaint (getCharacterBounds());
+    };
+    startTimerHz (60);
 }
 
 EndlessSmileInspiredAudioProcessorEditor::~EndlessSmileInspiredAudioProcessorEditor()
@@ -470,11 +496,11 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     if (backgroundCache.isValid())
         g.drawImageAt (backgroundCache, 0, 0);
 
-    g.setColour (juce::Colour (0xff262427));
+    g.setColour (juce::Colour (0xff07080a));
     g.drawRoundedRectangle (bounds.reduced (8.0f), 11.0f, 3.0f);
-    g.setColour (juce::Colour (0xffd2cece).withAlpha (0.72f));
+    g.setColour (juce::Colour (0xff7d8794).withAlpha (0.60f));
     g.drawRoundedRectangle (bounds.reduced (13.0f), 8.0f, 1.2f);
-    g.setColour (juce::Colours::white.withAlpha (0.08f));
+    g.setColour (juce::Colours::white.withAlpha (0.05f));
     g.drawLine (20.0f, 21.0f, w - 20.0f, 21.0f, 1.0f);
 
     // The character is drawn behind the real JUCE intensity slider. This keeps
@@ -666,8 +692,13 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
                                 faceCX - faceR * 0.40f, faceCY - faceR * 0.62f,
                                 juce::Colours::white.withAlpha (0.0f),
                                 faceCX + faceR * 0.02f, faceCY - faceR * 0.62f, true);
+    g.saveState();
+    juce::Path skullClip;
+    skullClip.addEllipse (faceCX - faceR, faceCY - faceR, faceR * 2.0f, faceR * 2.0f);
+    g.reduceClipRegion (skullClip, juce::AffineTransform());
     g.setGradientFill (sheen);
     g.fillEllipse (faceCX - faceR * 0.80f, faceCY - faceR * 0.95f, faceR * 0.80f, faceR * 0.60f);
+    g.restoreState();
     for (int side = -1; side <= 1; side += 2)
     {
         const float sd = (float) side;
@@ -843,9 +874,9 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     g.restoreState();
 
     // Footer: title, short accent rule and subtitle, all kept clear of the inner frame line.
-    g.setColour (juce::Colour (0xffe7e2dd).withAlpha (0.86f));
+    g.setColour (juce::Colour (0xffe9e2cf).withAlpha (0.92f));
     g.setFont (juce::Font (juce::FontOptions (24.0f, juce::Font::bold)));
-    g.drawText ("ENDLESS SMILE INSPIRED", 26, getHeight() - 62,
+    g.drawText ("SKELETON GRAVEYARD", 26, getHeight() - 62,
                 juce::roundToInt (w * 0.46f), 28, juce::Justification::centredLeft, true);
     g.setColour (juce::Colour (0xff39afd2).withAlpha (0.85f));
     g.fillRect (27.0f, (float) getHeight() - 33.0f, 44.0f, 2.0f);
@@ -886,19 +917,126 @@ void EndlessSmileInspiredAudioProcessorEditor::rebuildBackgroundCache()
     backgroundCache = juce::Image (juce::Image::ARGB, getWidth(), getHeight(), true);
     juce::Graphics g (backgroundCache);
 
-    // Finished charcoal panel: quiet centre lift, dark edges, subtle deterministic grain.
-    juce::ColourGradient background (juce::Colour (0xff6d6a6b), w * 0.46f, h * 0.33f,
-                                     juce::Colour (0xff5a585a), w, h, true);
-    background.addColour (0.55, juce::Colour (0xff686667));
-    g.setGradientFill (background);
+    // ---- Graveyard at night (drawn once per size; never repainted per frame) ----
+    juce::ColourGradient sky (juce::Colour (0xff05070b), 0.0f, 0.0f,
+                              juce::Colour (0xff1d2733), 0.0f, h * 0.90f, false);
+    sky.addColour (0.55, juce::Colour (0xff0d121a));
+    g.setGradientFill (sky);
     g.fillAll();
 
     juce::Random random (91);
+    for (int i = 0; i < 120; ++i)
+    {
+        const float px = random.nextFloat() * w;
+        const float py = random.nextFloat() * h * 0.62f;
+        const float size = 0.8f + random.nextFloat() * 1.3f;
+        g.setColour (juce::Colours::white.withAlpha (0.10f + random.nextFloat() * 0.45f));
+        g.fillEllipse (px, py, size, size);
+    }
+
+    // Moon with a soft halo, between the dial and the skeleton.
+    const float moonX = w * 0.585f;
+    const float moonY = h * 0.17f;
+    const float moonR = h * 0.072f;
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffdfe8f2).withAlpha (0.26f), moonX, moonY,
+                                             juce::Colour (0xffdfe8f2).withAlpha (0.0f), moonX + moonR * 4.4f, moonY, true));
+    g.fillEllipse (moonX - moonR * 4.4f, moonY - moonR * 4.4f, moonR * 8.8f, moonR * 8.8f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff0f4f9), moonX - moonR * 0.4f, moonY - moonR * 0.4f,
+                                             juce::Colour (0xffbcc7d6), moonX + moonR, moonY + moonR, false));
+    g.fillEllipse (moonX - moonR, moonY - moonR, moonR * 2.0f, moonR * 2.0f);
+    g.setColour (juce::Colour (0xff8996a8).withAlpha (0.20f));
+    g.fillEllipse (moonX - moonR * 0.55f, moonY - moonR * 0.25f, moonR * 0.45f, moonR * 0.45f);
+    g.fillEllipse (moonX + moonR * 0.15f, moonY + moonR * 0.30f, moonR * 0.32f, moonR * 0.32f);
+    g.fillEllipse (moonX + moonR * 0.20f, moonY - moonR * 0.58f, moonR * 0.24f, moonR * 0.24f);
+
+    // A few bats across the moon.
+    const auto drawBat = [&g] (float bx, float by, float size)
+    {
+        juce::Path bat;
+        bat.startNewSubPath (bx - size, by - size * 0.15f);
+        bat.quadraticTo (bx - size * 0.55f, by - size * 0.75f, bx, by);
+        bat.quadraticTo (bx + size * 0.55f, by - size * 0.75f, bx + size, by - size * 0.15f);
+        bat.quadraticTo (bx + size * 0.5f, by + size * 0.10f, bx, by + size * 0.35f);
+        bat.quadraticTo (bx - size * 0.5f, by + size * 0.10f, bx - size, by - size * 0.15f);
+        bat.closeSubPath();
+        g.setColour (juce::Colour (0xff04060a));
+        g.fillPath (bat);
+    };
+    drawBat (moonX + moonR * 1.5f, moonY - moonR * 0.4f, h * 0.020f);
+    drawBat (moonX - moonR * 0.9f, moonY - moonR * 1.5f, h * 0.014f);
+    drawBat (moonX + moonR * 2.5f, moonY + moonR * 0.9f, h * 0.012f);
+
+    // Tombstones and crosses, then the ground so their bases sink into it.
+    struct Stone { float x, width, height; int kind; };
+    const Stone stones[] = {
+        { 0.060f, 0.040f, 0.085f, 0 }, { 0.170f, 0.030f, 0.070f, 1 }, { 0.300f, 0.042f, 0.090f, 0 },
+        { 0.420f, 0.034f, 0.075f, 2 }, { 0.540f, 0.044f, 0.100f, 0 }, { 0.592f, 0.032f, 0.072f, 1 },
+        { 0.905f, 0.040f, 0.110f, 0 }, { 0.948f, 0.030f, 0.078f, 2 }, { 0.975f, 0.026f, 0.066f, 1 }
+    };
+    const float groundY = h * 0.91f;
+    for (const auto& stone : stones)
+    {
+        const float sx = w * stone.x;
+        const float sw = h * stone.width;
+        const float sh = h * stone.height;
+        const float top = groundY - sh;
+        juce::Path shape;
+        if (stone.kind == 0)        // arched headstone
+        {
+            shape.addRectangle (sx, top + sw * 0.5f, sw, sh - sw * 0.5f + 6.0f);
+            shape.addEllipse (sx, top, sw, sw);
+        }
+        else if (stone.kind == 1)   // cross
+        {
+            shape.addRectangle (sx + sw * 0.38f, top, sw * 0.24f, sh + 6.0f);
+            shape.addRectangle (sx, top + sh * 0.22f, sw, sw * 0.22f);
+        }
+        else                        // plain slab with a chipped corner
+        {
+            shape.startNewSubPath (sx, top + sw * 0.35f);
+            shape.lineTo (sx + sw * 0.4f, top);
+            shape.lineTo (sx + sw, top);
+            shape.lineTo (sx + sw, groundY + 6.0f);
+            shape.lineTo (sx, groundY + 6.0f);
+            shape.closeSubPath();
+        }
+        g.setColour (juce::Colour (0xff0f1318));
+        g.fillPath (shape);
+        g.setColour (juce::Colour (0xff5d6b7a).withAlpha (0.16f));
+        g.strokePath (shape, juce::PathStrokeType (1.0f));
+    }
+
+    juce::Path ground;
+    ground.startNewSubPath (0.0f, h * 0.925f);
+    ground.cubicTo (w * 0.28f, h * 0.885f, w * 0.60f, h * 0.945f, w, h * 0.90f);
+    ground.lineTo (w, h);
+    ground.lineTo (0.0f, h);
+    ground.closeSubPath();
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff0a0d10), 0.0f, h * 0.88f,
+                                             juce::Colour (0xff040506), 0.0f, h, false));
+    g.fillPath (ground);
+
+    // Drifting ground fog.
+    for (int band = 0; band < 3; ++band)
+    {
+        const float fy = h * (0.70f + 0.095f * (float) band);
+        const float fh = h * 0.15f;
+        juce::ColourGradient fog (juce::Colour (0xff9fb0c0).withAlpha (0.0f), 0.0f, fy - fh * 0.5f,
+                                  juce::Colour (0xff9fb0c0).withAlpha (0.0f), 0.0f, fy + fh * 0.5f, false);
+        fog.addColour (0.5, juce::Colour (0xff9fb0c0).withAlpha (0.075f));
+        g.setGradientFill (fog);
+        g.fillRect (0.0f, fy - fh * 0.5f, w, fh);
+    }
+
+    // Vignette, then a little deterministic grain.
+    g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, w * 0.5f, h * 0.45f,
+                                             juce::Colours::black.withAlpha (0.55f), 0.0f, 0.0f, true));
+    g.fillAll();
     for (int i = 0; i < 360; ++i)
     {
         const float px = random.nextFloat() * w;
         const float py = random.nextFloat() * h;
-        const float alpha = random.nextFloat() * 0.014f;
+        const float alpha = random.nextFloat() * 0.020f;
         g.setColour ((i % 3 == 0 ? juce::Colours::white : juce::Colours::black).withAlpha (alpha));
         g.fillEllipse (px, py, 1.0f, 1.0f);
     }
@@ -914,14 +1052,13 @@ juce::Rectangle<int> EndlessSmileInspiredAudioProcessorEditor::getCharacterBound
 
 void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
 {
-    // Smooth only the illustrated character, not the actual parameter. This
-    // keeps the motion fluid under automation while the knob stays immediate.
-    // Slide the category tab to the notch of the selected preset.
-    const float tabTarget = (float) (juce::jmax (1, preset.getSelectedId()) - 1) / 6.0f;
+    // 60 Hz: the preset tab slides smoothly. The mascot itself is not eased; it is
+    // set directly from the knob (see onValueChange) so it snaps with the control.
+    const float tabTarget = (float) (juce::jmax (1, preset.getSelectedId()) - 1) / (float) (numPresets - 1);
     if (tabSlide != tabTarget)
     {
-        tabSlide += (tabTarget - tabSlide) * 0.30f;
-        if (std::abs (tabTarget - tabSlide) < 0.002f)
+        tabSlide += (tabTarget - tabSlide) * 0.18f;
+        if (std::abs (tabTarget - tabSlide) < 0.0015f)
             tabSlide = tabTarget;
         lookAndFeel.setCassetteTabPosition (tabSlide);
         preset.repaint();
@@ -929,13 +1066,10 @@ void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
 
     const float previousIntensity = animatedIntensity;
     const float previousBlink = blinkAmount;
-    const float target = juce::jlimit (0.0f, 1.0f, (float) intensity.getValue() / 110.0f);
-    animatedIntensity += (target - animatedIntensity) * 0.22f;
-    if (std::abs (target - animatedIntensity) < 0.0005f)
-        animatedIntensity = target;
+    animatedIntensity = juce::jlimit (0.0f, 1.0f, (float) intensity.getValue() / 110.0f);
 
-    // Faster, more energetic motion at high intensity; nearly still at zero.
-    animationPhase += 0.035f + 0.055f * animatedIntensity;
+    // Idle motion and blinking keep their original pace (tuned at 30 Hz, so half-steps here).
+    animationPhase += (0.035f + 0.055f * animatedIntensity) * 0.5f;
     if (animationPhase >= juce::MathConstants<float>::twoPi)
         animationPhase -= juce::MathConstants<float>::twoPi;
 
@@ -943,21 +1077,19 @@ void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
     if (framesUntilBlink <= 0)
     {
         blinkAmount = 1.0f;
-        framesUntilBlink = 92 + (animationFrame % 61);
+        framesUntilBlink = 184 + (animationFrame % 122);
     }
     else
     {
-        blinkAmount *= 0.55f;
+        blinkAmount *= 0.742f;
         if (blinkAmount < 0.005f)
             blinkAmount = 0.0f;
         --framesUntilBlink;
     }
 
-    // At zero intensity the pose is static, so only repaint while something moves.
-    const bool needsRepaint = animatedIntensity != previousIntensity
-                           || animatedIntensity > 0.002f
-                           || blinkAmount > 0.0f
-                           || previousBlink > 0.0f;
-    if (needsRepaint)
+    // Repaint the mascot at once when the knob moves, and at 30 Hz while it is animating.
+    const bool moved = animatedIntensity != previousIntensity;
+    const bool animating = animatedIntensity > 0.002f || blinkAmount > 0.0f || previousBlink > 0.0f;
+    if (moved || (animating && (animationFrame & 1) == 0))
         repaint (getCharacterBounds());
 }
