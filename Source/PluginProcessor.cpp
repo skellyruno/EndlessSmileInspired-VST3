@@ -1,6 +1,22 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+namespace
+{
+    // Length of one rise in the Hard presets (Smack You in the Face, Broken Teeth).
+    // Placeholder pending a decision: a fixed time in seconds, or tempo-synced.
+    constexpr float hardRiserLoopSeconds = 8.0f;
+
+    // Transparent below 0.9, then rolls off smoothly so the effect never exceeds 1.0.
+    inline float softCeiling (float x) noexcept
+    {
+        const float a = std::abs (x);
+        if (a <= 0.9f)
+            return x;
+        return std::copysign (0.9f + 0.1f * std::tanh ((a - 0.9f) / 0.1f), x);
+    }
+}
+
 EndlessSmileInspiredAudioProcessor::EndlessSmileInspiredAudioProcessor()
     : AudioProcessor (BusesProperties().withInput  ("Input", juce::AudioChannelSet::stereo(), true)
                                       .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
@@ -31,11 +47,13 @@ void EndlessSmileInspiredAudioProcessor::prepareToPlay (double sampleRate, int s
     juce::ignoreUnused (samplesPerBlock);
     currentSampleRate = sampleRate;
 
+    reverb.setSampleRate (sampleRate);
+
     juce::Reverb::Parameters reverbParameters;
     reverbParameters.roomSize = 0.78f;
     reverbParameters.damping = 0.28f;
     reverbParameters.wetLevel = 0.0f; // updated smoothly per block from intensity
-    reverbParameters.dryLevel = 1.0f;
+    reverbParameters.dryLevel = 0.0f; // wet-only: the dry path is summed explicitly at unity gain
     reverbParameters.width = 1.0f;
     reverb.setParameters (reverbParameters);
     reverb.reset();
@@ -60,10 +78,15 @@ void EndlessSmileInspiredAudioProcessor::prepareToPlay (double sampleRate, int s
 
     smoothedIntensity.reset (sampleRate, 0.025);
     smoothedMix.reset (sampleRate, 0.02);
+    // Slow glide on delay time so moving the knob never clicks or zippers the echo.
+    smoothedDelaySeconds.reset (sampleRate, 0.30);
     smoothedIntensity.setCurrentAndTargetValue (intensityParameter->load());
     smoothedMix.setCurrentAndTargetValue (mixParameter->load());
+    smoothedDelaySeconds.setCurrentAndTargetValue (0.12f + 0.20f * (intensityParameter->load() / 110.0f));
     noiseState = 0x12345678u;
+    noiseStateRight = 0x9e3779b9u;
     riserPhase = 0.0f;
+    riserRamp = 0.0f;
 }
 
 void EndlessSmileInspiredAudioProcessor::releaseResources() {}
@@ -93,21 +116,29 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
     const bool hasNoiseAndRiser = (mode >= 4);
     const bool softHighPass = (mode <= 1);
 
-    smoothedIntensity.setTargetValue (intensityParameter->load());
+    const float intensityTarget = intensityParameter->load();
+    smoothedIntensity.setTargetValue (intensityTarget);
     smoothedMix.setTargetValue (mixParameter->load());
+    smoothedDelaySeconds.setTargetValue (0.12f + 0.20f * (intensityTarget / 110.0f));
 
-    // Reverb is present in all seven modes. The effect amount follows intensity.
+    // Reverb is present in all seven modes. The effect amount follows the smoothed
+    // intensity so reverb settings do not jump between blocks.
+    const float blockIntensity = juce::jlimit (0.0f, 1.0f, smoothedIntensity.getCurrentValue() / 110.0f);
     auto reverbParameters = reverb.getParameters();
-    reverbParameters.roomSize = 0.72f + 0.22f * (intensityParameter->load() / 110.0f);
+    reverbParameters.roomSize = 0.72f + 0.22f * blockIntensity;
     reverbParameters.damping = 0.30f;
-    reverbParameters.wetLevel = 0.08f + 0.42f * (intensityParameter->load() / 110.0f);
-    reverbParameters.dryLevel = 1.0f;
+    reverbParameters.wetLevel = 0.08f + 0.42f * blockIntensity;
+    reverbParameters.dryLevel = 0.0f; // wet-only; the dry signal is added back at unity below
     reverbParameters.width = 1.0f;
     reverb.setParameters (reverbParameters);
 
-    const float delaySeconds = 0.12f + 0.20f * (intensityParameter->load() / 110.0f);
-    for (auto& delay : delayLines)
-        delay.setDelay (juce::jlimit (1.0f, (float) (currentSampleRate * 1.24), delaySeconds * (float) currentSampleRate));
+    const auto nextNoise = [] (uint32_t& st) noexcept
+    {
+        st ^= st << 13;
+        st ^= st >> 17;
+        st ^= st << 5;
+        return ((float) (st & 0xffffu) / 32767.5f) - 1.0f;
+    };
 
     for (int i = 0; i < samples; ++i)
     {
@@ -118,21 +149,32 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
         for (auto& filter : highPassFilters)
             filter.setCutoffFrequency (cutoff);
 
+        const float delaySamples = juce::jlimit (1.0f, (float) (currentSampleRate * 1.24),
+                                                 smoothedDelaySeconds.getNextValue() * (float) currentSampleRate);
+        for (auto& delay : delayLines)
+            delay.setDelay (delaySamples);
+
         float dry[2] { 0.0f, 0.0f };
+        float highPassed[2] { 0.0f, 0.0f };
         float filtered[2] { 0.0f, 0.0f };
         float delayed[2] { 0.0f, 0.0f };
         for (int channel = 0; channel < channels; ++channel)
         {
             dry[channel] = buffer.getSample (channel, i);
-            filtered[channel] = highPassFilters[(size_t) channel].processSample (0, dry[channel]);
+            highPassed[channel] = highPassFilters[(size_t) channel].processSample (0, dry[channel]);
         }
 
         // JUCE Reverb API expects channel pointers plus a sample count.
         // This loop processes one frame at a time, so the sample count is 1.
+        // The reverb runs wet-only; the high-passed dry signal is added back at unity gain.
+        float wet[2] { highPassed[0], highPassed[1] };
         if (channels == 2)
-            reverb.processStereo (&filtered[0], &filtered[1], 1);
+            reverb.processStereo (&wet[0], &wet[1], 1);
         else
-            reverb.processMono (&filtered[0], 1);
+            reverb.processMono (&wet[0], 1);
+
+        for (int channel = 0; channel < channels; ++channel)
+            filtered[channel] = highPassed[channel] + wet[channel];
 
         for (int channel = 0; channel < channels; ++channel)
         {
@@ -149,13 +191,30 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
             }
         }
 
-        noiseState ^= noiseState << 13;
-        noiseState ^= noiseState >> 17;
-        noiseState ^= noiseState << 5;
-        const float noise = ((float) (noiseState & 0xffffu) / 32767.5f) - 1.0f;
+        const float noiseLeft = nextNoise (noiseState);
+        const float noiseRight = (channels == 2) ? nextNoise (noiseStateRight) : noiseLeft;
         const float noiseAmount = hasNoiseAndRiser ? (0.025f + 0.16f * intensity) * intensity : 0.0f;
-        const float riserFrequency = 80.0f + 9000.0f * intensity * intensity;
-        const float riser = hasNoiseAndRiser ? std::sin (riserPhase) * intensity * intensity * 0.12f : 0.0f;
+
+        float riserFrequency = 80.0f;
+        float riserLevel = 0.0f;
+        if (mode == 6)
+        {
+            // Extreme: noise and riser are driven directly by the intensity knob.
+            riserFrequency = 80.0f + 9000.0f * intensity * intensity;
+            riserLevel = intensity * intensity * 0.12f;
+        }
+        else if (hasNoiseAndRiser)
+        {
+            // Hard: a continual riser that keeps climbing and restarts, with short
+            // fades at each end of the loop so the restart never clicks.
+            riserRamp += 1.0f / (hardRiserLoopSeconds * (float) currentSampleRate);
+            if (riserRamp >= 1.0f)
+                riserRamp -= 1.0f;
+            const float fade = juce::jmin (1.0f, riserRamp / 0.03f, (1.0f - riserRamp) / 0.05f);
+            riserFrequency = 80.0f + 9000.0f * riserRamp * riserRamp;
+            riserLevel = (0.30f + 0.70f * intensity) * 0.10f * fade;
+        }
+        const float riser = hasNoiseAndRiser ? std::sin (riserPhase) * riserLevel : 0.0f;
         riserPhase += juce::MathConstants<float>::twoPi * riserFrequency / (float) currentSampleRate;
         if (riserPhase >= juce::MathConstants<float>::twoPi)
             riserPhase -= juce::MathConstants<float>::twoPi;
@@ -166,11 +225,13 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
 
         for (int channel = 0; channel < channels; ++channel)
         {
-            const float modulated = filtered[channel] + noise * noiseAmount + riser;
+            const float noiseSample = (channel == 0) ? noiseLeft : noiseRight;
+            const float modulated = filtered[channel] + noiseSample * noiseAmount + riser;
             const float saturated = std::tanh (modulated * drive) / std::tanh (drive);
             float effected = saturated * (1.0f - reverbAmount * 0.35f - delayAmount * 0.35f)
                            + filtered[channel] * reverbAmount * 0.35f
                            + delayed[channel] * delayAmount;
+            effected = softCeiling (effected);
             effected = juce::jmap (intensity, dry[channel], effected);
             buffer.setSample (channel, i, dry[channel] * (1.0f - mix) + effected * mix);
         }

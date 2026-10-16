@@ -18,6 +18,23 @@ public:
                                bool shouldDrawButtonAsDown) override;
     void drawButtonText (juce::Graphics&, juce::TextButton&, bool isMouseOverButton,
                          bool isButtonDown) override;
+
+    // Position of the category tab along the cassette's preset timeline (0 = first
+    // preset, 1 = last). Animated by the editor so the tab slides between presets.
+    void setCassetteTabPosition (float newPosition) noexcept { cassetteTabPosition = newPosition; }
+
+private:
+    float cassetteTabPosition = 0.0f;
+
+    // Everything on the dial that does not depend on the value is drawn once into
+    // this image (at physical resolution) and reused, so dragging stays cheap.
+    juce::Image dialCache;
+    juce::Rectangle<int> dialCacheArea;
+    int dialCacheWidth = 0;
+    int dialCacheHeight = 0;
+    float dialCacheScale = 0.0f;
+    float dialCacheStart = 0.0f;
+    float dialCacheEnd = 0.0f;
 };
 
 class EndlessSmileInspiredAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -50,6 +67,7 @@ private:
     // The static panel (gradient + grain) is rendered once per size, not every frame.
     juce::Image backgroundCache;
 
+    float tabSlide = 0.0f;
     float animationPhase = 0.0f;
     float animatedIntensity = 0.0f;
     float blinkAmount = 0.0f;

@@ -43,8 +43,11 @@ private:
     std::array<juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear>, 2> delayLines;
     juce::SmoothedValue<float> smoothedIntensity;
     juce::SmoothedValue<float> smoothedMix;
+    juce::SmoothedValue<float> smoothedDelaySeconds;
     uint32_t noiseState = 0x12345678u;
+    uint32_t noiseStateRight = 0x9e3779b9u; // independent stream for the right channel
     float riserPhase = 0.0f;
+    float riserRamp = 0.0f;                 // 0..1 position in the Hard-preset riser loop
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EndlessSmileInspiredAudioProcessor)
 };
