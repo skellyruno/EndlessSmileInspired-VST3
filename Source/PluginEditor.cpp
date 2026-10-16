@@ -394,22 +394,9 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     const float t = juce::jlimit (0.0f, 1.0f, animatedIntensity);
     const float ease = t * t * (3.0f - 2.0f * t);
 
-    // Finished charcoal panel: quiet centre lift, dark edges, subtle deterministic grain.
-    juce::ColourGradient background (juce::Colour (0xff6d6a6b), w * 0.46f, h * 0.33f,
-                                     juce::Colour (0xff5a585a), w, h, true);
-    background.addColour (0.55, juce::Colour (0xff686667));
-    g.setGradientFill (background);
-    g.fillAll();
-
-    juce::Random random (91);
-    for (int i = 0; i < 360; ++i)
-    {
-        const float px = random.nextFloat() * w;
-        const float py = random.nextFloat() * h;
-        const float alpha = random.nextFloat() * 0.014f;
-        g.setColour ((i % 3 == 0 ? juce::Colours::white : juce::Colours::black).withAlpha (alpha));
-        g.fillEllipse (px, py, 1.0f, 1.0f);
-    }
+    // Static panel (gradient + grain) comes from a cache built in resized().
+    if (backgroundCache.isValid())
+        g.drawImageAt (backgroundCache, 0, 0);
 
     g.setColour (juce::Colour (0xff262427));
     g.drawRoundedRectangle (bounds.reduced (8.0f), 11.0f, 3.0f);
@@ -496,11 +483,11 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillEllipse (faceCX - faceR * 0.075f, pelvisY + 4.0f, faceR * 0.15f, 8.0f);
 
     // Ribcage: dark cavity, four rib pairs, then the spine on top.
-    const float cageTop = torsoTop - faceR * 0.10f;
-    g.setColour (socketDark.withAlpha (0.62f));
-    g.fillEllipse (faceCX - faceR * 0.46f, cageTop, faceR * 0.92f, (pelvisY + 2.0f) - cageTop);
-
     const float visibleTorsoTop = faceCY + faceR * 0.93f;
+    const float cageTop = visibleTorsoTop - 2.0f;
+    g.setColour (socketDark.withAlpha (0.62f));
+    g.fillEllipse (faceCX - faceR * 0.44f, cageTop, faceR * 0.88f, (pelvisY + 2.0f) - cageTop);
+
     for (int rib = 0; rib < 4; ++rib)
     {
         const float ribY = visibleTorsoTop + (pelvisY - visibleTorsoTop) * (0.08f + 0.22f * (float) rib);
@@ -585,6 +572,19 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (boneEdge);
     g.drawEllipse (faceCX - faceR, faceCY - faceR, faceR * 2.0f, faceR * 2.0f, 2.4f);
 
+    // Soft sheen and faint jaw lines (drawn before the mouth so it covers them).
+    g.setColour (juce::Colours::white.withAlpha (0.20f));
+    g.fillEllipse (faceCX - faceR * 0.70f, faceCY - faceR * 0.86f, faceR * 0.62f, faceR * 0.34f);
+    for (int side = -1; side <= 1; side += 2)
+    {
+        const float sd = (float) side;
+        juce::Path jaw;
+        jaw.startNewSubPath (faceCX + sd * faceR * 0.80f, faceCY + faceR * 0.10f);
+        jaw.quadraticTo (faceCX + sd * faceR * 0.78f, faceCY + faceR * 0.55f,
+                         faceCX + sd * faceR * 0.30f, faceCY + faceR * 0.84f);
+        strokeRoundedPath (g, jaw, boneEdge.withAlpha (0.35f), 1.5f);
+    }
+
     // A small crack and cheekbone shading give the skull some character.
     juce::Path crack;
     crack.startNewSubPath (faceCX + faceR * 0.18f, faceCY - faceR * 0.985f);
@@ -638,11 +638,11 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
         g.strokePath (socket, juce::PathStrokeType (1.6f));
 
         // Brow ridge: inner end raised when sad, outer end raised when happy.
-        const float browY = eyeY - faceR * 0.06f;
+        const float browY = eyeY - faceR * (0.06f + 0.05f * ease);
         juce::Path brow;
         brow.startNewSubPath (eyeCX - sd * eyeW * 0.62f, browY - faceR * 0.07f * (1.0f - ease));
-        brow.quadraticTo (eyeCX, browY - faceR * 0.05f,
-                          eyeCX + sd * eyeW * 0.62f, browY - faceR * 0.07f * ease);
+        brow.quadraticTo (eyeCX, browY - faceR * (0.05f + 0.025f * ease),
+                          eyeCX + sd * eyeW * 0.62f, browY + faceR * 0.01f * (1.0f - ease));
         strokeRoundedPath (g, brow, boneEdge.withAlpha (0.75f), 2.2f);
     }
 
@@ -764,6 +764,8 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
 
 void EndlessSmileInspiredAudioProcessorEditor::resized()
 {
+    rebuildBackgroundCache();
+
     const auto bounds = getLocalBounds();
     const int dialWidth = juce::jmin (280, juce::roundToInt ((float) bounds.getHeight() * 0.40f));
     // The custom knob draws its readout and label below the ring; reserve enough
@@ -781,10 +783,48 @@ void EndlessSmileInspiredAudioProcessorEditor::resized()
     nextPresetButton.setBounds (leftMargin + controlWidth - 44, presetY + 9, 62, 52);
 }
 
+void EndlessSmileInspiredAudioProcessorEditor::rebuildBackgroundCache()
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return;
+
+    const float w = (float) getWidth();
+    const float h = (float) getHeight();
+    backgroundCache = juce::Image (juce::Image::ARGB, getWidth(), getHeight(), true);
+    juce::Graphics g (backgroundCache);
+
+    // Finished charcoal panel: quiet centre lift, dark edges, subtle deterministic grain.
+    juce::ColourGradient background (juce::Colour (0xff6d6a6b), w * 0.46f, h * 0.33f,
+                                     juce::Colour (0xff5a585a), w, h, true);
+    background.addColour (0.55, juce::Colour (0xff686667));
+    g.setGradientFill (background);
+    g.fillAll();
+
+    juce::Random random (91);
+    for (int i = 0; i < 360; ++i)
+    {
+        const float px = random.nextFloat() * w;
+        const float py = random.nextFloat() * h;
+        const float alpha = random.nextFloat() * 0.014f;
+        g.setColour ((i % 3 == 0 ? juce::Colours::white : juce::Colours::black).withAlpha (alpha));
+        g.fillEllipse (px, py, 1.0f, 1.0f);
+    }
+}
+
+juce::Rectangle<int> EndlessSmileInspiredAudioProcessorEditor::getCharacterBounds() const
+{
+    // Everything the animated character can touch lies right of this line, clear of
+    // the dial and cassette, so animation never forces those controls to repaint.
+    const int x = juce::roundToInt ((float) getWidth() * 0.52f);
+    return { x, 0, getWidth() - x, getHeight() };
+}
+
 void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
 {
     // Smooth only the illustrated character, not the actual parameter. This
     // keeps the motion fluid under automation while the knob stays immediate.
+    const float previousIntensity = animatedIntensity;
+    const float previousBlink = blinkAmount;
     const float target = juce::jlimit (0.0f, 1.0f, (float) intensity.getValue() / 110.0f);
     animatedIntensity += (target - animatedIntensity) * 0.22f;
     if (std::abs (target - animatedIntensity) < 0.0005f)
@@ -804,8 +844,16 @@ void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
     else
     {
         blinkAmount *= 0.55f;
+        if (blinkAmount < 0.005f)
+            blinkAmount = 0.0f;
         --framesUntilBlink;
     }
 
-    repaint();
+    // At zero intensity the pose is static, so only repaint while something moves.
+    const bool needsRepaint = animatedIntensity != previousIntensity
+                           || animatedIntensity > 0.002f
+                           || blinkAmount > 0.0f
+                           || previousBlink > 0.0f;
+    if (needsRepaint)
+        repaint (getCharacterBounds());
 }
