@@ -23,8 +23,13 @@ public:
     // preset, 1 = last). Animated by the editor so the tab slides between presets.
     void setCassetteTabPosition (float newPosition) noexcept { cassetteTabPosition = newPosition; }
 
+    // The dial draws this eased position instead of the raw slider position, so the
+    // knob glides smoothly. A negative value means "use the slider's own position".
+    void setDialDisplayPosition (float newPosition) noexcept { dialDisplayPosition = newPosition; }
+
 private:
     float cassetteTabPosition = 0.0f;
+    float dialDisplayPosition = -1.0f;
 
     // Everything on the dial that does not depend on the value is drawn once into
     // this image (at physical resolution) and reused, so dragging stays cheap.
@@ -44,11 +49,15 @@ public:
     explicit EndlessSmileInspiredAudioProcessorEditor (EndlessSmileInspiredAudioProcessor&);
     ~EndlessSmileInspiredAudioProcessorEditor() override;
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
 
 private:
     void timerCallback() override;
     void rebuildBackgroundCache();
+    void buildFogTexture();
+    juce::Rectangle<int> getFogBottomBand() const;
+    juce::Rectangle<int> getFogTopBand() const;
     juce::Rectangle<int> getCharacterBounds() const;
 
     EndlessSmileInspiredAudioProcessor& processor;
@@ -66,6 +75,12 @@ private:
     // character feels elastic when the host/automation moves the intensity knob.
     // The static panel (gradient + grain) is rendered once per size, not every frame.
     juce::Image backgroundCache;
+
+    // Tileable fog texture, scrolled horizontally over the whole plugin.
+    juce::Image fogTexture;
+    float fogOffsetA = 0.0f;
+    float fogOffsetB = 0.0f;
+    float knobDisplay = 0.0f;
 
     float tabSlide = 0.0f;
     float animationPhase = 0.0f;
