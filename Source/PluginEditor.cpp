@@ -4,7 +4,7 @@
 namespace
 {
     // Presets 1-7 are the original seven; 8-12 are the graveyard presets.
-    constexpr int numPresets = 12;
+    constexpr int numPresets = 16;
 
 
     void strokeRoundedPath (juce::Graphics& g, const juce::Path& path,
@@ -439,7 +439,11 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
         "BANSHEE SCREAM",
         "GHOST WHISPER",
         "RATTLING BONES",
-        "CRYPT DRONE"
+        "CRYPT DRONE",
+        "WAILING WRAITH",
+        "ZOMBIE GROAN",
+        "COFFIN CREAK",
+        "HAUNTED BELLS"
     };
     for (int i = 0; i < presetNames.size(); ++i)
         preset.addItem (presetNames[i], i + 1);
@@ -467,6 +471,10 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
             case 10: preset.setTooltip ("Ghost Whisper - Graveyard: breathy whispers and a haunting echo."); break;
             case 11: preset.setTooltip ("Rattling Bones - Graveyard: dry bone clicks that get denser as intensity rises."); break;
             case 12: preset.setTooltip ("Crypt Drone - Graveyard: a low, growing drone with a moving vowel."); break;
+            case 13: preset.setTooltip ("Wailing Wraith - Graveyard: a wavering, mournful wail with a trailing echo."); break;
+            case 14: preset.setTooltip ("Zombie Groan - Graveyard: a low, growling groan that swells with intensity."); break;
+            case 15: preset.setTooltip ("Coffin Creak - Graveyard: a long, resonant creak that wanders in pitch."); break;
+            case 16: preset.setTooltip ("Haunted Bells - Graveyard: slow, ringing bell strikes that come faster as intensity rises."); break;
             default: preset.setTooltip ("Choose one of the build-up profiles."); break;
         }
     };
@@ -512,8 +520,10 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     // The mascot follows the knob instantly: no easing, repaint right away.
     intensity.onValueChange = [this]
     {
+        // State is set at once; the 60 Hz timer paints it. Painting here on every
+        // mouse-move event could mean well over 100 big repaints a second while dragging.
         animatedIntensity = juce::jlimit (0.0f, 1.0f, (float) intensity.getValue() / 110.0f);
-        repaint (getCharacterBounds());
+        characterDirty = true;
     };
     startTimerHz (60);
 }
@@ -533,9 +543,18 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     const float t = juce::jlimit (0.0f, 1.0f, animatedIntensity);
     const float ease = t * t * (3.0f - 2.0f * t);
 
-    // Static panel (gradient + grain) comes from a cache built in resized().
+    // The static panel comes from a cache stored at physical-pixel resolution, so every
+    // repaint is a plain 1:1 copy instead of a scaled one.
+    paintStartMs = juce::Time::getMillisecondCounterHiRes();
+    pixelScale = juce::jmax (1.0f, (float) g.getInternalContext().getPhysicalPixelScaleFactor());
+    if (! backgroundCache.isValid() || backgroundCacheScale != pixelScale)
+    {
+        rebuildBackgroundCache (pixelScale);
+        skipCostSample = true;
+    }
+    ensureFogImages();
     if (backgroundCache.isValid())
-        g.drawImageAt (backgroundCache, 0, 0);
+        g.drawImageTransformed (backgroundCache, juce::AffineTransform::scale (1.0f / pixelScale));
 
     g.setColour (juce::Colour (0xff07080a));
     g.drawRoundedRectangle (bounds.reduced (8.0f), 11.0f, 3.0f);
@@ -929,7 +948,10 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
 
 void EndlessSmileInspiredAudioProcessorEditor::resized()
 {
-    rebuildBackgroundCache();
+    // Caches are rebuilt lazily in paint(), once the real pixel scale is known.
+    backgroundCache = juce::Image();
+    fogBottomImage = juce::Image();
+    fogTopImage = juce::Image();
 
     const auto bounds = getLocalBounds();
     const int dialWidth = juce::jmin (280, juce::roundToInt ((float) bounds.getHeight() * 0.40f));
@@ -988,37 +1010,78 @@ juce::Rectangle<int> EndlessSmileInspiredAudioProcessorEditor::getFogTopBand() c
              getWidth(), juce::roundToInt ((float) getHeight() * 0.20f) };
 }
 
-void EndlessSmileInspiredAudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+void EndlessSmileInspiredAudioProcessorEditor::ensureFogImages()
 {
-    if (! fogTexture.isValid() || getWidth() <= 0)
+    if (! fogTexture.isValid() || getWidth() <= 0 || getHeight() <= 0)
         return;
 
-    // Two drifting layers at different speeds and strengths, drawn over everything so
-    // the mist passes in front of the controls and the skeleton as well as behind them.
-    const float w = (float) getWidth();
-    const auto drawLayer = [&] (juce::Rectangle<int> band, float offset, float opacity)
+    const int widthPx = juce::roundToInt ((float) getWidth() * pixelScale);
+    if (fogBottomImage.isValid() && fogTopImage.isValid()
+        && fogImageScale == pixelScale && fogImageWidth == widthPx)
+        return;
+
+    // Stretch the small tileable texture to the full window width once, so scrolling it
+    // later never needs any scaling or filtering.
+    const auto makeBand = [&] (juce::Rectangle<int> band)
     {
-        const float shift = offset * w;
-        const auto bandF = band.toFloat();
-        g.setOpacity (opacity);
-        g.drawImage (fogTexture, juce::Rectangle<float> (-shift, bandF.getY(), w, bandF.getHeight()),
-                     juce::RectanglePlacement::stretchToFit);
-        g.drawImage (fogTexture, juce::Rectangle<float> (w - shift, bandF.getY(), w, bandF.getHeight()),
-                     juce::RectanglePlacement::stretchToFit);
+        const int heightPx = juce::jmax (1, juce::roundToInt ((float) band.getHeight() * pixelScale));
+        juce::Image image (juce::Image::ARGB, widthPx, heightPx, true);
+        juce::Graphics ig (image);
+        ig.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+        ig.drawImage (fogTexture, 0, 0, widthPx, heightPx,
+                      0, 0, fogTexture.getWidth(), fogTexture.getHeight());
+        return image;
     };
-    drawLayer (getFogBottomBand(), fogOffsetA, 0.55f);
-    drawLayer (getFogTopBand(), fogOffsetB, 0.30f);
+    fogBottomImage = makeBand (getFogBottomBand());
+    fogTopImage = makeBand (getFogTopBand());
+    fogImageScale = pixelScale;
+    fogImageWidth = widthPx;
+    skipCostSample = true;
 }
 
-void EndlessSmileInspiredAudioProcessorEditor::rebuildBackgroundCache()
+void EndlessSmileInspiredAudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    if (fogBottomImage.isValid() && fogTopImage.isValid())
+    {
+        // Two drifting layers at different speeds and strengths, drawn over everything so
+        // the mist passes in front of the controls and the skeleton as well as behind them.
+        const auto drawLayer = [&] (const juce::Image& image, juce::Rectangle<int> band,
+                                    float offset, float opacity)
+        {
+            const int widthPx = image.getWidth();
+            const int shiftPx = juce::roundToInt (offset * (float) widthPx) % widthPx;
+            g.setOpacity (opacity);
+            for (int copy = 0; copy < 2; ++copy)
+            {
+                const float xLogical = (float) (copy * widthPx - shiftPx) / pixelScale;
+                g.drawImageTransformed (image, juce::AffineTransform::scale (1.0f / pixelScale)
+                                                   .translated (xLogical, (float) band.getY()));
+            }
+        };
+        drawLayer (fogBottomImage, getFogBottomBand(), fogOffsetA, 0.55f);
+        drawLayer (fogTopImage, getFogTopBand(), fogOffsetB, 0.30f);
+    }
+
+    // Measure how long this whole repaint pass took (background, controls, mascot and fog).
+    const float cost = (float) (juce::Time::getMillisecondCounterHiRes() - paintStartMs);
+    if (skipCostSample)
+        skipCostSample = false;        // the pass that built the caches is not representative
+    else
+        paintPeakMs = juce::jmax (cost, paintPeakMs);
+}
+
+void EndlessSmileInspiredAudioProcessorEditor::rebuildBackgroundCache (float scale)
 {
     if (getWidth() <= 0 || getHeight() <= 0)
         return;
 
     const float w = (float) getWidth();
     const float h = (float) getHeight();
-    backgroundCache = juce::Image (juce::Image::ARGB, getWidth(), getHeight(), true);
+    backgroundCache = juce::Image (juce::Image::ARGB, juce::roundToInt (w * scale),
+                                   juce::roundToInt (h * scale), true);
+    backgroundCacheScale = scale;
     juce::Graphics g (backgroundCache);
+    g.addTransform (juce::AffineTransform::scale (scale));
 
     // ---- Graveyard at night (drawn once per size; never repainted per frame) ----
     juce::ColourGradient sky (juce::Colour (0xff05070b), 0.0f, 0.0f,
@@ -1291,10 +1354,12 @@ juce::Rectangle<int> EndlessSmileInspiredAudioProcessorEditor::getCharacterBound
 
 void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
 {
-    // 60 Hz: the preset tab slides smoothly. The mascot itself is not eased; it is
-    // set directly from the knob (see onValueChange) so it snaps with the control.
+    // 60 Hz. The controls always come first: while the knob is being dragged or the
+    // preset tab is sliding, decorative repaints (fog, idle sway) are paused, so the
+    // main thread is free to keep the controls smooth.
     const float tabTarget = (float) (juce::jmax (1, preset.getSelectedId()) - 1) / (float) (numPresets - 1);
-    if (tabSlide != tabTarget)
+    const bool tabSliding = tabSlide != tabTarget;
+    if (tabSliding)
     {
         tabSlide += (tabTarget - tabSlide) * 0.18f;
         if (std::abs (tabTarget - tabSlide) < 0.0015f)
@@ -1306,7 +1371,8 @@ void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
     // The dial glides toward the real value (cosmetic only: the number and the
     // parameter are always exact), which hides the steps between mouse movements.
     const float knobTarget = (float) intensity.valueToProportionOfLength (intensity.getValue());
-    if (knobDisplay != knobTarget)
+    const bool knobMoving = knobDisplay != knobTarget;
+    if (knobMoving)
     {
         knobDisplay += (knobTarget - knobDisplay) * 0.42f;
         if (std::abs (knobTarget - knobDisplay) < 0.0008f)
@@ -1314,21 +1380,30 @@ void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
         lookAndFeel.setDialDisplayPosition (knobDisplay);
         intensity.repaint();
     }
+    const bool busy = tabSliding || knobMoving || intensity.isMouseButtonDown();
 
-    // Slow fog drift; the bands are repainted at 20 Hz, which is plenty for slow mist.
+    // Slow fog drift (time-based, so it stays smooth whatever the repaint rate).
     fogOffsetA += 0.020f / 60.0f;
     fogOffsetB += 0.034f / 60.0f;
     if (fogOffsetA >= 1.0f) fogOffsetA -= 1.0f;
     if (fogOffsetB >= 1.0f) fogOffsetB -= 1.0f;
-    if ((animationFrame % 3) == 0)
+    if (! busy && fogInterval > 0 && (animationFrame % fogInterval) == 0)
     {
         repaint (getFogBottomBand());
         repaint (getFogTopBand());
     }
 
+    // Self-tuning once a second: the slower the slowest recent repaint pass, the less
+    // often the fog is repainted. The peak decays with time, so it recovers by itself.
+    paintPeakMs *= 0.985f;
+    if ((animationFrame % 60) == 0)
+        fogInterval = paintPeakMs > 18.0f ? 12 : (paintPeakMs > 11.0f ? 6 : 3);
+
     const float previousIntensity = animatedIntensity;
     const float previousBlink = blinkAmount;
     animatedIntensity = juce::jlimit (0.0f, 1.0f, (float) intensity.getValue() / 110.0f);
+    if (animatedIntensity != previousIntensity)
+        characterDirty = true;
 
     // Idle motion and blinking keep their original pace (tuned at 30 Hz, so half-steps here).
     animationPhase += (0.035f + 0.055f * animatedIntensity) * 0.5f;
@@ -1349,9 +1424,14 @@ void EndlessSmileInspiredAudioProcessorEditor::timerCallback()
         --framesUntilBlink;
     }
 
-    // Repaint the mascot at once when the knob moves, and at 30 Hz while it is animating.
-    const bool moved = animatedIntensity != previousIntensity;
+    // Mascot: follow the knob promptly (every tick when idle, every other tick while the
+    // knob is held), and sway at 30 Hz only when nothing is being dragged.
     const bool animating = animatedIntensity > 0.002f || blinkAmount > 0.0f || previousBlink > 0.0f;
-    if (moved || (animating && (animationFrame & 1) == 0))
+    const bool swayTick = animating && ! busy && (animationFrame & 1) == 0;
+    const bool followTick = characterDirty && (! busy || (animationFrame & 1) == 0);
+    if (followTick || swayTick)
+    {
+        characterDirty = false;
         repaint (getCharacterBounds());
+    }
 }

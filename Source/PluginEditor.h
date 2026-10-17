@@ -54,7 +54,8 @@ public:
 
 private:
     void timerCallback() override;
-    void rebuildBackgroundCache();
+    void rebuildBackgroundCache (float scale);
+    void ensureFogImages();
     void buildFogTexture();
     juce::Rectangle<int> getFogBottomBand() const;
     juce::Rectangle<int> getFogTopBand() const;
@@ -75,6 +76,20 @@ private:
     // character feels elastic when the host/automation moves the intensity knob.
     // The static panel (gradient + grain) is rendered once per size, not every frame.
     juce::Image backgroundCache;
+    float backgroundCacheScale = 0.0f;   // physical pixels per logical pixel the cache was built for
+    float pixelScale = 1.0f;             // current scale, learnt in paint()
+
+    // Fog bands pre-scaled to physical pixels so each frame is a plain 1:1 blit.
+    juce::Image fogBottomImage, fogTopImage;
+    float fogImageScale = 0.0f;
+    int fogImageWidth = 0;
+
+    // Self-tuning: if a repaint pass is slow, the decorative fog updates less often.
+    double paintStartMs = 0.0;
+    float paintPeakMs = 0.0f;
+    int fogInterval = 3;                 // timer ticks between fog repaints (60 Hz timer)
+    bool skipCostSample = false;
+    bool characterDirty = false;
 
     // Tileable fog texture, scrolled horizontally over the whole plugin.
     juce::Image fogTexture;

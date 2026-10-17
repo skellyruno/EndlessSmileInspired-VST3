@@ -4,7 +4,7 @@
 namespace
 {
     // Presets 0-6 are the original seven; 7-11 are the graveyard presets.
-    constexpr int presetCount = 12;
+    constexpr int presetCount = 16;
 
     // Length of one rise in the Hard presets (Smack You in the Face, Broken Teeth).
     // Placeholder pending a decision: a fixed time in seconds, or tempo-synced.
@@ -41,7 +41,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout EndlessSmileInspiredAudioPro
         StringArray { "Fist in the Air", "Helium Jumping", "No Limit", "Face Melting Joy",
                      "Smack You in the Face", "Broken Teeth", "Dada Dynamite",
                      "Midnight Howl", "Banshee Scream", "Ghost Whisper",
-                     "Rattling Bones", "Crypt Drone" }, 0));
+                     "Rattling Bones", "Crypt Drone",
+                     "Wailing Wraith", "Zombie Groan", "Coffin Creak", "Haunted Bells" }, 0));
     parameters.push_back (std::make_unique<AudioParameterFloat> (
         ParameterID { "mix", 1 }, "Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
     return { parameters.begin(), parameters.end() };
@@ -90,7 +91,10 @@ void EndlessSmileInspiredAudioProcessor::prepareToPlay (double sampleRate, int s
         filter.setResonance (5.0f);
     }
     lfoPhaseA = lfoPhaseB = lfoPhaseC = lfoPhaseD = 0.0f;
-    vibratoPhase = scarePhase = scarePhase2 = 0.0f;
+    vibratoPhase = scarePhase = scarePhase2 = roughPhase = 0.0f;
+    for (int k = 0; k < 4; ++k)
+        bellPhase[k] = bellEnv[k] = 0.0f;
+    bellFreq = 196.0f;
     clickEnv[0] = clickEnv[1] = 0.0f;
     feedbackDamp[0] = feedbackDamp[1] = 0.0f;
 
@@ -131,16 +135,16 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
 
     const int mode = juce::jlimit (0, presetCount - 1, juce::roundToInt (presetParameter->load()));
     const bool graveyard = (mode >= 7);
-    const bool hasDelay = (mode == 1 || mode == 3 || mode == 5 || mode == 6 || mode == 8 || mode == 9);
+    const bool hasDelay = (mode == 1 || mode == 3 || mode == 5 || mode == 6 || mode == 8 || mode == 9 || mode == 12);
     const bool hasNoiseAndRiser = (mode >= 4 && mode <= 6);
     const bool softHighPass = (mode <= 1);
-    const float feedbackBase = (mode == 9) ? 0.42f : 0.0f;   // Ghost Whisper's echo trails off slowly
+    const float feedbackBase = (mode == 9) ? 0.42f : (mode == 12 ? 0.35f : 0.0f);   // haunting echo tails
 
     const float intensityTarget = intensityParameter->load();
     smoothedIntensity.setTargetValue (intensityTarget);
     smoothedMix.setTargetValue (mixParameter->load());
-    smoothedDelaySeconds.setTargetValue (mode == 9 ? 0.36f
-                                         : (mode == 8 ? 0.27f : 0.12f + 0.20f * (intensityTarget / 110.0f)));
+    smoothedDelaySeconds.setTargetValue (mode == 9 ? 0.36f : (mode == 12 ? 0.31f
+                                         : (mode == 8 ? 0.27f : 0.12f + 0.20f * (intensityTarget / 110.0f))));
 
     // Reverb is present in every mode. The effect amount follows the smoothed
     // intensity so reverb settings do not jump between blocks.
@@ -160,13 +164,17 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
     const float lfoCStep = twoPi * 0.22f / sr;
     const float lfoDStep = twoPi * 0.33f / sr;
     const float vibratoStep = twoPi * 6.1f / sr;
+    const float roughStep = twoPi * 17.0f / sr;
+    const float bellDecay[4] { std::exp (-1.0f / (3.5f * sr)), std::exp (-1.0f / (2.2f * sr)),
+                               std::exp (-1.0f / (1.4f * sr)), std::exp (-1.0f / (0.8f * sr)) };
     const float clickDecay = std::exp (-1.0f / (0.012f * sr));
     const float maxBandCentre = sr * 0.45f;
     const auto wrapPhase = [twoPi] (float& phase) noexcept { if (phase >= twoPi) phase -= twoPi; };
 
     if (graveyard)
     {
-        const float bandQ = mode == 7 ? 10.0f : (mode == 8 ? 3.5f : (mode == 9 ? 5.0f : (mode == 10 ? 2.5f : 4.5f)));
+        const float bandQ = mode == 7 ? 10.0f : (mode == 8 ? 3.5f : (mode == 9 ? 5.0f : (mode == 10 ? 2.5f
+                          : (mode == 12 ? 3.0f : (mode == 13 ? 4.0f : (mode == 14 ? 14.0f : 4.5f))))));
         for (auto& filter : scaryBandFilters)
         {
             filter.setResonance (bandQ);
@@ -267,7 +275,7 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                     }
                     break;
                 }
-                default: // 11, Crypt Drone: two detuned low buzzes through a slowly moving vowel
+                case 11: // Crypt Drone: two detuned low buzzes through a slowly moving vowel
                 {
                     const float base = 46.0f * (1.0f + 0.012f * std::sin (lfoPhaseA));
                     scarePhase += twoPi * base / sr;
@@ -289,6 +297,86 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                     }
                     break;
                 }
+                case 12: // Wailing Wraith: two slightly detuned, wavering voices through a drifting formant
+                {
+                    const float pitch = 300.0f + 650.0f * std::pow (intensity, 1.2f)
+                                      + 55.0f * std::sin (vibratoPhase) * (0.5f + intensity);
+                    scarePhase += twoPi * pitch / sr;
+                    scarePhase2 += twoPi * pitch * 1.006f / sr;
+                    wrapPhase (scarePhase);
+                    wrapPhase (scarePhase2);
+                    const float voice = std::sin (scarePhase) + 0.45f * std::sin (2.0f * scarePhase2)
+                                      + 0.18f * std::sin (3.0f * scarePhase);
+                    const float formant = juce::jlimit (60.0f, maxBandCentre, 700.0f + 700.0f * sweepA);
+                    const float flutter = 0.65f + 0.35f * std::sin (lfoPhaseB);
+                    const float level = 0.25f * flutter * intensity;
+                    for (int channel = 0; channel < channels; ++channel)
+                    {
+                        scaryBandFilters[(size_t) channel].setCutoffFrequency (formant);
+                        layer[channel] = std::tanh (scaryBandFilters[(size_t) channel].processSample (0, voice) * 1.2f) * level;
+                    }
+                    break;
+                }
+                case 13: // Zombie Groan: a low, wobbling buzz with a growling amplitude and a moving vowel
+                {
+                    const float base = 62.0f + 22.0f * std::sin (lfoPhaseA) + 18.0f * intensity;
+                    scarePhase += twoPi * base / sr;
+                    wrapPhase (scarePhase);
+                    float stack = 0.0f;
+                    for (int k = 1; k <= 6; ++k)
+                        stack += std::sin ((float) k * scarePhase) / (float) k;
+                    const float rough = 0.55f + 0.45f * std::sin (roughPhase);
+                    const float formant = juce::jlimit (60.0f, maxBandCentre,
+                                                        380.0f + 420.0f * (0.5f + 0.5f * std::sin (lfoPhaseC)));
+                    const float level = 0.35f * std::pow (intensity, 0.9f);
+                    for (int channel = 0; channel < channels; ++channel)
+                    {
+                        scaryBandFilters[(size_t) channel].setCutoffFrequency (formant);
+                        layer[channel] = std::tanh (scaryBandFilters[(size_t) channel].processSample (0, stack) * rough * 2.2f) * level;
+                    }
+                    break;
+                }
+                case 14: // Coffin Creak: a very resonant band wandering up and down with a stick-slip wobble
+                {
+                    const float sweep = 0.6f * sweepA + 0.4f * (0.5f + 0.5f * std::sin (lfoPhaseC));
+                    const float centre = juce::jlimit (60.0f, maxBandCentre,
+                                                       420.0f + 1500.0f * sweep * (0.35f + 0.65f * intensity));
+                    const float stick = 0.35f + 0.65f * std::pow (juce::jmax (0.0f, 0.5f + 0.5f * std::sin (roughPhase)), 1.5f);
+                    const float swell = 0.4f + 0.6f * (0.5f + 0.5f * std::sin (lfoPhaseB));
+                    const float level = 0.22f * stick * swell * std::pow (intensity, 0.9f);
+                    for (int channel = 0; channel < channels; ++channel)
+                    {
+                        scaryBandFilters[(size_t) channel].setCutoffFrequency (centre);
+                        layer[channel] = scaryBandFilters[(size_t) channel].processSample (0, channel == 0 ? noiseLeft : noiseRight) * level;
+                    }
+                    break;
+                }
+                case 15: // Haunted Bells: random, slowly decaying inharmonic strikes
+                {
+                    const float ratios[4] { 1.0f, 2.76f, 5.40f, 8.93f };
+                    const float amps[4] { 1.0f, 0.6f, 0.35f, 0.2f };
+                    const float strikeChance = (0.18f + 1.6f * intensity) / sr;
+                    if (0.5f * (noiseLeft + 1.0f) < strikeChance)
+                    {
+                        const float freqs[4] { 196.0f, 233.1f, 293.7f, 349.2f };
+                        bellFreq = freqs[juce::jlimit (0, 3, (int) (0.5f * (noiseRight + 1.0f) * 4.0f))];
+                        for (int k = 0; k < 4; ++k)
+                            bellEnv[k] = amps[k];
+                    }
+                    float sum = 0.0f;
+                    for (int k = 0; k < 4; ++k)
+                    {
+                        sum += bellEnv[k] * std::sin (bellPhase[k]);
+                        bellPhase[k] += twoPi * bellFreq * ratios[k] / sr;
+                        wrapPhase (bellPhase[k]);
+                        bellEnv[k] *= bellDecay[k];
+                    }
+                    const float level = 0.14f * (0.3f + 0.7f * intensity);
+                    layer[0] = layer[1] = sum * level;
+                    break;
+                }
+                default:
+                    break;
             }
 
             lfoPhaseA += lfoAStep;  wrapPhase (lfoPhaseA);
@@ -296,6 +384,7 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
             lfoPhaseC += lfoCStep;  wrapPhase (lfoPhaseC);
             lfoPhaseD += lfoDStep;  wrapPhase (lfoPhaseD);
             vibratoPhase += vibratoStep;  wrapPhase (vibratoPhase);
+            roughPhase += roughStep;      wrapPhase (roughPhase);
         }
 
         float dry[2] { 0.0f, 0.0f };

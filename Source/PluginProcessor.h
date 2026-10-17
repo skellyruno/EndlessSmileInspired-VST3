@@ -53,6 +53,10 @@ private:
     std::array<juce::dsp::StateVariableTPTFilter<float>, 2> scaryBandFilters;
     float lfoPhaseA = 0.0f, lfoPhaseB = 0.0f, lfoPhaseC = 0.0f, lfoPhaseD = 0.0f;
     float vibratoPhase = 0.0f, scarePhase = 0.0f, scarePhase2 = 0.0f;
+    float roughPhase = 0.0f;                // fast amplitude wobble (growl, creak)
+    float bellPhase[4] { 0.0f, 0.0f, 0.0f, 0.0f };
+    float bellEnv[4] { 0.0f, 0.0f, 0.0f, 0.0f };
+    float bellFreq = 196.0f;
     float clickEnv[2] { 0.0f, 0.0f };       // rattling-bones click envelopes
     float feedbackDamp[2] { 0.0f, 0.0f };   // low-pass inside the ghost echo's feedback path
 
