@@ -6,6 +6,8 @@
 class EndlessSmileInspiredLookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
+    EndlessSmileInspiredLookAndFeel();
+
     void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height,
                            float sliderPosProportional, float rotaryStartAngle,
                            float rotaryEndAngle, juce::Slider&) override;
@@ -40,6 +42,10 @@ private:
     float dialCacheScale = 0.0f;
     float dialCacheStart = 0.0f;
     float dialCacheEnd = 0.0f;
+
+    // Knob-face artwork decoded from the embedded PNG. If it is invalid the dial falls
+    // back to the drawn metal knob and paddle.
+    juce::Image emblemImage;
 };
 
 class EndlessSmileInspiredAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -72,8 +78,11 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> intensityAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> presetAttachment;
 
-    // UI-only animation state. Values are smoothed on the message thread so the
-    // character feels elastic when the host/automation moves the intensity knob.
+    // Tooltips need a TooltipWindow to appear; without one they are silently ignored.
+    juce::TooltipWindow tooltipWindow { this, 700 };
+
+    // UI-only animation state. The mascot follows the knob directly (no easing); only
+    // blinking, sway and the preset tab are animated over time.
     // The static panel (gradient + grain) is rendered once per size, not every frame.
     juce::Image backgroundCache;
     float backgroundCacheScale = 0.0f;   // physical pixels per logical pixel the cache was built for

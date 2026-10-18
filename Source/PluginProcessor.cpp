@@ -3,7 +3,7 @@
 
 namespace
 {
-    // Presets 0-6 are the original seven; 7-11 are the graveyard presets.
+    // Presets 0-6 are the original seven; 7-15 are the nine graveyard presets.
     constexpr int presetCount = 16;
 
     // Length of one rise in the Hard presets (Smack You in the Face, Broken Teeth).
@@ -236,7 +236,7 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                     const float osc = std::sin (scarePhase) + 0.55f * std::sin (2.0f * scarePhase)
                                     + 0.30f * std::sin (3.0f * scarePhase);
                     const float formant = juce::jlimit (60.0f, maxBandCentre, 1500.0f + 900.0f * intensity);
-                    const float level = 0.42f * std::pow (intensity, 1.1f);
+                    const float level = 0.27f * std::pow (intensity, 1.1f);   // trimmed: was ~7 dB hotter than the other presets
                     for (int channel = 0; channel < channels; ++channel)
                     {
                         scaryBandFilters[(size_t) channel].setCutoffFrequency (formant);

@@ -1,9 +1,10 @@
 #include "PluginEditor.h"
+#include "BinaryData.h"
 #include <cmath>
 
 namespace
 {
-    // Presets 1-7 are the original seven; 8-12 are the graveyard presets.
+    // Presets 1-7 are the original seven; 8-16 are the nine graveyard presets.
     constexpr int numPresets = 16;
 
 
@@ -15,6 +16,13 @@ namespace
                         juce::PathStrokeType::curved,
                         juce::PathStrokeType::rounded));
     }
+}
+
+EndlessSmileInspiredLookAndFeel::EndlessSmileInspiredLookAndFeel()
+{
+    // Knob-face artwork embedded at build time (Assets/KnobEmblem.png via CMake).
+    emblemImage = juce::ImageFileFormat::loadFrom (BinaryData::KnobEmblem_png,
+                                                   (size_t) BinaryData::KnobEmblem_pngSize);
 }
 
 void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
@@ -36,6 +44,7 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
                                                                           : sliderPosProportional);
     const float current = start + (end - start) * t;
     const float knobR = radius * 0.62f;
+    const float emblemR = radius - 14.0f;   // the emblem fills the plate, just inside the ticks
     const float readoutY = cy + radius + 8.0f;
 
     // ---- Static layer: identical for every slider value ---------------------
@@ -74,6 +83,16 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
             gg.drawLine (x1, y1, x2, y2, tick % 5 == 0 ? 1.4f : 0.8f);
         }
 
+        if (emblemImage.isValid())
+        {
+            // The emblem is the knob face: a circular image with a feathered edge.
+            gg.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+            gg.drawImage (emblemImage,
+                          juce::Rectangle<float> (cx - emblemR, cy - emblemR, emblemR * 2.0f, emblemR * 2.0f),
+                          juce::RectanglePlacement::stretchToFit);
+        }
+        else
+        {
         // Brushed-metal bezel and radial-gradient knob body.
         gg.setColour (juce::Colour (0xffd1d0d0).withAlpha (0.94f));
         gg.fillEllipse (cx - knobR - 3.2f, cy - knobR - 3.2f,
@@ -116,6 +135,7 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
                                   juce::MathConstants<float>::pi * 1.08f,
                                   juce::MathConstants<float>::pi * 1.88f, true);
         strokeRoundedPath (gg, bezelGlint, juce::Colours::white.withAlpha (0.28f), 1.4f);
+        }
 
         // End-of-travel labels.
         gg.setColour (juce::Colour (0xffc2c3c3).withAlpha (0.72f));
@@ -188,6 +208,8 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     g.setColour (juce::Colours::white.withAlpha (0.45f));
     g.fillEllipse (markerX - 2.6f, markerY - 4.2f, 3.6f, 2.4f);
 
+    if (! emblemImage.isValid())
+    {
     // Large glossy black blade that overhangs the disc: a lit upper facet and a darker
     // lower facet meet at a centre ridge, narrowing to a sharp tip on the +x end
     // (which points at the current value).
@@ -251,6 +273,52 @@ void EndlessSmileInspiredLookAndFeel::drawRotarySlider (juce::Graphics& g,
     strokeRoundedPath (g, gripGlint, juce::Colours::white.withAlpha (0.50f), 2.2f);
     g.setColour (juce::Colour (0xffa5a8ab).withAlpha (0.92f));
     g.fillEllipse (cx - 2.8f, cy - 2.8f, 5.6f, 5.6f);
+    }
+    else
+    {
+        // Power-up: the emblem is dim and dormant at zero and reaches full neon at maximum.
+        const float dim = (1.0f - t) * 0.62f;
+        if (dim > 0.002f)
+        {
+            g.setColour (juce::Colours::black.withAlpha (dim));
+            g.fillEllipse (cx - emblemR, cy - emblemR, emblemR * 2.0f, emblemR * 2.0f);
+        }
+
+        const juce::Colour neon (0xff4dff2a);
+        if (t > 0.01f)
+        {
+            // Green glow bleeding outwards from the rim as intensity rises.
+            const float outer = emblemR + 16.0f;
+            const double rim = (double) (emblemR / outer);
+            juce::ColourGradient glow (neon.withAlpha (0.0f), cx, cy,
+                                       neon.withAlpha (0.0f), cx + outer, cy, true);
+            glow.addColour (rim - 0.002, neon.withAlpha (0.0f));
+            glow.addColour (rim, neon.withAlpha (0.30f * t));
+            g.setGradientFill (glow);
+            g.fillEllipse (cx - outer, cy - outer, outer * 2.0f, outer * 2.0f);
+        }
+
+        // Pointer: a neon spike on the rim that turns with the value.
+        const float dx = std::cos (current - quarterTurn);
+        const float dy = std::sin (current - quarterTurn);
+        const float px = -dy;
+        const float py = dx;
+        juce::Path pointer;
+        pointer.startNewSubPath (cx + dx * (emblemR - 2.0f), cy + dy * (emblemR - 2.0f));
+        pointer.lineTo (cx + dx * (emblemR + 11.0f) + px * 5.5f, cy + dy * (emblemR + 11.0f) + py * 5.5f);
+        pointer.lineTo (cx + dx * (emblemR + 11.0f) - px * 5.5f, cy + dy * (emblemR + 11.0f) - py * 5.5f);
+        pointer.closeSubPath();
+        g.setColour (neon.withAlpha (0.30f));
+        g.strokePath (pointer, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved));
+        g.setColour (neon);
+        g.fillPath (pointer);
+        g.setColour (juce::Colour (0xff031a07));
+        g.strokePath (pointer, juce::PathStrokeType (1.0f));
+        juce::Path core;
+        core.startNewSubPath (cx + dx * (emblemR + 1.0f), cy + dy * (emblemR + 1.0f));
+        core.lineTo (cx + dx * (emblemR + 8.0f), cy + dy * (emblemR + 8.0f));
+        strokeRoundedPath (g, core, juce::Colours::white.withAlpha (0.75f), 1.2f);
+    }
 
     g.setColour (juce::Colour (0xfffbfafa));
     g.setFont (juce::Font (juce::FontOptions (13.5f)));
@@ -413,6 +481,7 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
     lookAndFeel.setColour (juce::PopupMenu::textColourId, juce::Colour (0xffe9e2cf));
     lookAndFeel.setColour (juce::PopupMenu::highlightedBackgroundColourId, juce::Colour (0xff2fae5a));
     lookAndFeel.setColour (juce::PopupMenu::highlightedTextColourId, juce::Colour (0xff08140c));
+    lookAndFeel.setColour (juce::PopupMenu::headerTextColourId, juce::Colour (0xffbff7d0));
 
     intensity.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     intensity.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
@@ -445,8 +514,17 @@ EndlessSmileInspiredAudioProcessorEditor::EndlessSmileInspiredAudioProcessorEdit
         "COFFIN CREAK",
         "HAUNTED BELLS"
     };
+    // Group the dropdown by category. Headings are not items, so ids still run 1..16
+    // and the parameter attachment is unaffected.
     for (int i = 0; i < presetNames.size(); ++i)
+    {
+        if (i == 0) preset.addSectionHeading ("SOFT");
+        if (i == 2) preset.addSectionHeading ("MEDIUM");
+        if (i == 4) preset.addSectionHeading ("HARD");
+        if (i == 6) preset.addSectionHeading ("EXTREME");
+        if (i == 7) preset.addSectionHeading ("GRAVEYARD");
         preset.addItem (presetNames[i], i + 1);
+    }
     preset.setJustificationType (juce::Justification::centredLeft);
     preset.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff35b862));
     preset.setColour (juce::ComboBox::textColourId, juce::Colour (0xff30252b));
@@ -954,7 +1032,7 @@ void EndlessSmileInspiredAudioProcessorEditor::resized()
     fogTopImage = juce::Image();
 
     const auto bounds = getLocalBounds();
-    const int dialWidth = juce::jmin (280, juce::roundToInt ((float) bounds.getHeight() * 0.40f));
+    const int dialWidth = juce::jmin (280, juce::roundToInt ((float) bounds.getHeight() * 0.44f));
     // The custom knob draws its readout and label below the ring; reserve enough
     // height for both so neither gets clipped at the default editor size.
     const int dialHeight = dialWidth + 115;
