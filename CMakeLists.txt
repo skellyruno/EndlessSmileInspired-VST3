@@ -24,6 +24,10 @@ juce_generate_juce_header(EndlessSmileInspired)
 target_compile_features(EndlessSmileInspired PRIVATE cxx_std_17)
 target_compile_definitions(EndlessSmileInspired PUBLIC
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+# Knob-face artwork, embedded into the plugin binary (see Assets/KnobEmblem.png).
+juce_add_binary_data(EmblemData SOURCES Assets/KnobEmblem.png)
+
 target_link_libraries(EndlessSmileInspired PRIVATE
+    EmblemData
     juce::juce_audio_utils juce::juce_dsp
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
