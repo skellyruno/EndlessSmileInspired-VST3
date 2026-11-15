@@ -6,8 +6,6 @@
 class EndlessSmileInspiredLookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
-    EndlessSmileInspiredLookAndFeel();
-
     void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height,
                            float sliderPosProportional, float rotaryStartAngle,
                            float rotaryEndAngle, juce::Slider&) override;
@@ -29,9 +27,17 @@ public:
     // knob glides smoothly. A negative value means "use the slider's own position".
     void setDialDisplayPosition (float newPosition) noexcept { dialDisplayPosition = newPosition; }
 
+    // LITE mode skips the dial's power-up glow.
+    void setLiteMode (bool shouldBeLite) noexcept { liteMode = shouldBeLite; }
+
+    void drawLinearSlider (juce::Graphics&, int x, int y, int width, int height, float sliderPos,
+                           float minSliderPos, float maxSliderPos, juce::Slider::SliderStyle,
+                           juce::Slider&) override;
+
 private:
     float cassetteTabPosition = 0.0f;
     float dialDisplayPosition = -1.0f;
+    bool liteMode = false;
 
     // Everything on the dial that does not depend on the value is drawn once into
     // this image (at physical resolution) and reused, so dragging stays cheap.
@@ -43,9 +49,8 @@ private:
     float dialCacheStart = 0.0f;
     float dialCacheEnd = 0.0f;
 
-    // Knob-face artwork decoded from the embedded PNG. If it is invalid the dial falls
-    // back to the drawn metal knob and paddle.
-    juce::Image emblemImage;
+    // The knob cap, rescaled to physical pixels and rotated with the value.
+    juce::Image knobCapImage;
 };
 
 class EndlessSmileInspiredAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -61,6 +66,10 @@ public:
 private:
     void timerCallback() override;
     void rebuildBackgroundCache (float scale);
+    void applySkin();
+    void saveUiState();
+    void drawBats (juce::Graphics&) const;
+    juce::Rectangle<int> getBatBounds() const;
     void ensureFogImages();
     void buildFogTexture();
     juce::Rectangle<int> getFogBottomBand() const;
@@ -74,9 +83,23 @@ private:
     juce::ComboBox preset;
     juce::TextButton previousPresetButton;
     juce::TextButton nextPresetButton;
+    juce::Slider corruption;
+    juce::TextButton syncButton, liteButton, skinButton;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> intensityAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> presetAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> corruptionAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncAttachment;
+
+    // UI state that is saved with the project (see saveUiState / the constructor).
+    bool liteMode = false;
+    int skinIndex = 0;
+    int sceneIndex = 1;
+
+    // Reactive and tempo-aware animation.
+    float beatPhase = 0.0f;
+    float levelSlow = 0.0f;
+    float startle = 0.0f;
 
     // Tooltips need a TooltipWindow to appear; without one they are silently ignored.
     juce::TooltipWindow tooltipWindow { this, 700 };
@@ -112,6 +135,7 @@ private:
     float blinkAmount = 0.0f;
     int animationFrame = 0;
     int framesUntilBlink = 82;
+    double lastTickMs = 0.0;             // for time-based animation steps
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EndlessSmileInspiredAudioProcessorEditor)
 };

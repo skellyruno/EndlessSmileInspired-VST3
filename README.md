@@ -12,6 +12,19 @@ Tailored Noise and contains none of their code or artwork.
 - **Preset** (16): chosen from the dropdown, the arrows, or the host. A category tab
   slides along a timeline as you move through presets.
 - **Mix** (host-automatable parameter, default 100%): no longer shown in the window.
+- **Corruption** (0-1): a one-slider macro. It adds to the effective Intensity (so it works
+  even with the knob at zero), pushes the saturator, reverb and a little hiss, and infects
+  the skeleton: bones turn toxic and veins creep up the skull as the slider rises.
+- **SYNC**: when on and the host reports a tempo, the delay time and the Hard-preset riser
+  (2 bars) follow it, and the bats flap in time with the beat. Without a host tempo the
+  fixed times are used.
+- **LITE**: a pencil-ink background with no gradients, glow or fog; the lightest mode.
+- **SKIN**: cycles TOXIC, BLOOD, ICE and INK (monochrome). LITE and SKIN are saved with the
+  project.
+- Each preset category is a different scene: SOFT dusk, MEDIUM night, HARD blood-red night,
+  EXTREME all-dead, GRAVEYARD toxic green.
+- The skeleton reacts to the input: sudden loud transients widen its eyes.
+- Hovering over a control or a preset shows a one-line eerie story.
 
 ## Presets
 
@@ -44,15 +57,18 @@ back at unity gain → optional delay (with feedback in Ghost Whisper and Wailin
 → level-compensated saturator → noise/riser (Hard, Extreme) or synthesised graveyard
 voice → soft ceiling at 1.0 → crossfade with the dry signal by Intensity, then Mix.
 
-Tunable constants: `hardRiserLoopSeconds` (top of `PluginProcessor.cpp`, 8 s placeholder
-for the Hard-preset riser) and the per-voice `level` values inside each graveyard case.
+Tunable constants: `hardRiserLoopSeconds` (top of `PluginProcessor.cpp`, 8 s; the riser length
+when SYNC is off or the host reports no tempo) and the per-voice `level` values inside each graveyard case.
 
 ## Artwork
 
-The knob face is `Assets/KnobEmblem.png` (a 512 px circular crop of the neon skull-and-gear
-emblem supplied for this project), embedded into the plugin at build time by
-`juce_add_binary_data` in `CMakeLists.txt`. If the image fails to decode, the dial falls
-back to the drawn metal knob. Only ship builds containing artwork you have the rights to.
+The main dial follows the Skell Necromancer project's REANIMATE dial: a dark well
+(`Assets/dial_well.png`), 90 ticks, a violet-green-cyan value arc, a bone pointer and a
+brushed-metal cap (`Assets/knob_cap_big.png`) that turns with the value. Both images are embedded
+with `juce_add_binary_data` (CMake target `EndlessSmileAssets`). As the value rises the dial powers up: a green halo, glowing arc and ticks, a rim light on the
+cap and a lit pointer tip (LITE mode turns this off). The well is cached at physical
+resolution; the cap is rescaled once and only rotated while you drag. The Necromancer's
+animated rune ring is not included.
 
 ## Build on Windows
 
@@ -66,12 +82,23 @@ are still `EndlessSmileInspired`; only the window title and the name reported to
 host say "Skeleton Graveyard". Renaming the files means changing `PRODUCT_NAME` in
 `CMakeLists.txt` together with the paths in `.github/workflows/build.yml`.
 
+## Offline DSP tests
+
+`tests/run.sh` compiles the real `PluginProcessor.cpp` against a small stand-in for the JUCE
+classes it uses (`tests/mock`; the reverb is a port of JUCE's Freeverb) and runs
+`tests/dsp_test.cpp`: bit-exact dry at Intensity 0, no NaN/inf and no output above 1.0 for every
+preset (22.05-192 kHz, block sizes 1-4096, mono/stereo, hot input, tempo sync, automation),
+Mix 0 = dry, recovery after a NaN/inf sample, very hot input, graveyard voices
+balanced on silent input (-34..-22 dBFS), reverb tail decay, zero latency and CPU. `tests/ui_check.sh` type-checks `PluginEditor.cpp` against a signature-level JUCE GUI stand-in
+(`tests/mock_ui`; it does not render). Both need only g++. It does not replace listening or
+pluginval.
+
 ## Verification status — please read
 
 - The interface and audio code up to the fog/knob/preset-timeline work was built by
   CI and checked from screenshots.
-- The latest changes (performance restructuring, the four newest presets, tooltips,
-  dropdown headings) have only been type-checked against a minimal stand-in for the
+- The latest changes (everything from the performance restructuring onwards, including the
+  Necromancer-style main dial, tempo sync, scenes, skins, corruption and LITE mode) have only been type-checked against a minimal stand-in for the
   JUCE API with g++, not built against real JUCE.
 - Nothing has been measured on a real host. Loudness figures come from a numeric model
   of the signal path that leaves out JUCE's reverb. Graveyard voice levels were set
@@ -81,7 +108,20 @@ host say "Skeleton Graveyard". Renaming the files means changing `PRODUCT_NAME` 
 
 ## Known behaviour worth knowing
 
-- Presets 3 and 4 (full high-pass sweep) are nearly silent at maximum Intensity, because
-  the sweep reaches the top of the spectrum. That is the sweep working as described.
+- In the full-sweep presets (3-7) the dry signal is high-passed up to 15 kHz, but the reverb is
+  fed through its own high-pass capped at 2.5 kHz (`washMaxCutoff`), so a reverb wash remains at
+  the top instead of silence.
 - The fog drift repaints less often on slow machines (it adapts to measured repaint
   time) and pauses while you drag the knob or the preset tab slides.
+
+## v1.2.0 upgrade and CI notes
+
+The VST3 product name, bundle ID, manufacturer and plugin codes are deliberately
+unchanged to preserve host plugin identification. The first three automation
+parameter IDs (`intensity`, `preset`, `mix`) are unchanged, the original seven
+preset slots retain their indices, and `sync`/`corruption` are added at the end.
+Run `python3 tests/check_compatibility.py` for a static compatibility guard.
+The GitHub Actions workflow runs mock DSP and editor signature checks on Linux
+plus a real JUCE VST3 compile on Windows for PRs and manual requests.
+These checks do not establish FL Studio project recall, pluginval, UI rendering,
+real-world audio quality or real-host CPU/latency.

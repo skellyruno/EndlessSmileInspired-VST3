@@ -10,6 +10,10 @@ namespace
     // Placeholder pending a decision: a fixed time in seconds, or tempo-synced.
     constexpr float hardRiserLoopSeconds = 8.0f;
 
+    // The reverb is fed through its own high-pass that stops rising at this frequency, so in the
+    // full-sweep presets the dry signal can thin out to air while a reverb wash remains at the top.
+    constexpr float washMaxCutoff = 2500.0f;
+
     // Transparent below 0.9, then rolls off smoothly so the effect never exceeds 1.0.
     inline float softCeiling (float x) noexcept
     {
@@ -28,6 +32,8 @@ EndlessSmileInspiredAudioProcessor::EndlessSmileInspiredAudioProcessor()
     intensityParameter = state.getRawParameterValue ("intensity");
     presetParameter = state.getRawParameterValue ("preset");
     mixParameter = state.getRawParameterValue ("mix");
+    syncParameter = state.getRawParameterValue ("sync");
+    corruptionParameter = state.getRawParameterValue ("corruption");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout EndlessSmileInspiredAudioProcessor::createParameters()
@@ -45,6 +51,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout EndlessSmileInspiredAudioPro
                      "Wailing Wraith", "Zombie Groan", "Coffin Creak", "Haunted Bells" }, 0));
     parameters.push_back (std::make_unique<AudioParameterFloat> (
         ParameterID { "mix", 1 }, "Mix", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    parameters.push_back (std::make_unique<AudioParameterBool> (
+        ParameterID { "sync", 1 }, "Tempo Sync", true));
+    parameters.push_back (std::make_unique<AudioParameterFloat> (
+        ParameterID { "corruption", 1 }, "Corruption", NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
     return { parameters.begin(), parameters.end() };
 }
 
@@ -65,14 +75,15 @@ void EndlessSmileInspiredAudioProcessor::prepareToPlay (double sampleRate, int s
     reverb.reset();
 
     juce::dsp::ProcessSpec monoSpec { sampleRate, (juce::uint32) juce::jmax (1, getBlockSize()), 1 };
-    for (auto& filter : highPassFilters)
-    {
-        filter.reset();
-        filter.prepare (monoSpec);
-        filter.setType (juce::dsp::StateVariableTPTFilterType::highpass);
-        filter.setCutoffFrequency (20.0f);
-        filter.setResonance (0.707f);
-    }
+    for (auto* filters : { &highPassFilters, &washFilters })
+        for (auto& filter : *filters)
+        {
+            filter.reset();
+            filter.prepare (monoSpec);
+            filter.setType (juce::dsp::StateVariableTPTFilterType::highpass);
+            filter.setCutoffFrequency (20.0f);
+            filter.setResonance (0.707f);
+        }
 
     for (auto& delay : delayLines)
     {
@@ -84,9 +95,7 @@ void EndlessSmileInspiredAudioProcessor::prepareToPlay (double sampleRate, int s
 
     for (auto& filter : scaryBandFilters)
     {
-        filter.reset();
-        filter.prepare (monoSpec);
-        filter.setType (juce::dsp::StateVariableTPTFilterType::bandpass);
+        filter.prepare (sampleRate);
         filter.setCutoffFrequency (800.0f);
         filter.setResonance (5.0f);
     }
@@ -100,11 +109,17 @@ void EndlessSmileInspiredAudioProcessor::prepareToPlay (double sampleRate, int s
 
     smoothedIntensity.reset (sampleRate, 0.025);
     smoothedMix.reset (sampleRate, 0.02);
+    smoothedCorruption.reset (sampleRate, 0.05);
+    levelEnv = 0.0f;
     // Slow glide on delay time so moving the knob never clicks or zippers the echo.
     smoothedDelaySeconds.reset (sampleRate, 0.30);
     smoothedIntensity.setCurrentAndTargetValue (intensityParameter->load());
     smoothedMix.setCurrentAndTargetValue (mixParameter->load());
+    smoothedCorruption.setCurrentAndTargetValue (corruptionParameter->load());
     smoothedDelaySeconds.setCurrentAndTargetValue (0.12f + 0.20f * (intensityParameter->load() / 110.0f));
+    hostBpmValid.store (false);
+    hostPlaying.store (false);
+    hostPpq.store (-1.0f);
     noiseState = 0x12345678u;
     noiseStateRight = 0x9e3779b9u;
     riserPhase = 0.0f;
@@ -140,15 +155,77 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
     const bool softHighPass = (mode <= 1);
     const float feedbackBase = (mode == 9) ? 0.42f : (mode == 12 ? 0.35f : 0.0f);   // haunting echo tails
 
+    // Host tempo: never keep a stale BPM/transport flag after the host stops reporting it.
+    // Missing or invalid BPM must use the documented fixed-time delay/riser fallback.
+    bool validHostTempo = false;
+    bool playing = false;
+    float ppqPosition = -1.0f;
+    if (auto* playHead = getPlayHead())
+    {
+        if (auto position = playHead->getPosition())
+        {
+            const auto& info = *position;
+            if (auto bpm = info.getBpm())
+            {
+                if (std::isfinite (*bpm) && *bpm > 0.0)
+                {
+                    hostBpm.store ((float) *bpm);
+                    validHostTempo = true;
+                }
+            }
+            playing = info.getIsPlaying();
+            if (auto ppq = info.getPpqPosition())
+                if (std::isfinite (*ppq))
+                    ppqPosition = (float) *ppq;
+        }
+    }
+    hostBpmValid.store (validHostTempo);
+    hostPlaying.store (playing);
+    hostPpq.store (ppqPosition);
+
+    // Peak envelope of the incoming signal; the editor uses it for the mascot's expression.
+    // The same pass zeroes any NaN/inf/absurd sample: one such value from a host would otherwise
+    // stay in the filters and the reverb for good.
+    {
+        float blockPeak = 0.0f;
+        for (int channel = 0; channel < channels; ++channel)
+            for (int n = 0; n < samples; ++n)
+            {
+                float sample = buffer.getSample (channel, n);
+                if (! (std::abs (sample) < 1.0e6f))   // false for NaN as well
+                {
+                    sample = 0.0f;
+                    buffer.setSample (channel, n, sample);
+                }
+                blockPeak = juce::jmax (blockPeak, std::abs (sample));
+            }
+        levelEnv = juce::jmax (blockPeak, levelEnv * 0.92f);
+        inputLevel.store (levelEnv);
+    }
+
+    const bool syncOn = syncParameter->load() > 0.5f && hostBpmValid.load();
+    const float beatSeconds = 60.0f / juce::jlimit (30.0f, 300.0f, hostBpm.load());
+    const float riserLoopSeconds = syncOn ? juce::jlimit (2.0f, 20.0f, 8.0f * beatSeconds)   // 2 bars
+                                          : hardRiserLoopSeconds;
+
     const float intensityTarget = intensityParameter->load();
     smoothedIntensity.setTargetValue (intensityTarget);
+    smoothedCorruption.setTargetValue (corruptionParameter->load());
     smoothedMix.setTargetValue (mixParameter->load());
-    smoothedDelaySeconds.setTargetValue (mode == 9 ? 0.36f : (mode == 12 ? 0.31f
-                                         : (mode == 8 ? 0.27f : 0.12f + 0.20f * (intensityTarget / 110.0f))));
+    float delayTarget = mode == 9 ? 0.36f : (mode == 12 ? 0.31f
+                        : (mode == 8 ? 0.27f : 0.12f + 0.20f * (intensityTarget / 110.0f)));
+    if (syncOn)
+    {
+        // Delay length in beats: an eighth, a dotted eighth or a quarter depending on the preset.
+        const float beats = (mode == 1 || mode == 3) ? 0.5f : ((mode == 6 || mode == 9) ? 1.0f : 0.75f);
+        delayTarget = juce::jmin (1.2f, beats * beatSeconds);
+    }
+    smoothedDelaySeconds.setTargetValue (delayTarget);
 
     // Reverb is present in every mode. The effect amount follows the smoothed
     // intensity so reverb settings do not jump between blocks.
-    const float blockIntensity = juce::jlimit (0.0f, 1.0f, smoothedIntensity.getCurrentValue() / 110.0f);
+    const float knobBlock = juce::jlimit (0.0f, 1.0f, smoothedIntensity.getCurrentValue() / 110.0f);
+    const float blockIntensity = juce::jlimit (0.0f, 1.0f, knobBlock + smoothedCorruption.getCurrentValue() * 0.45f * (1.0f - knobBlock));
     auto reverbParameters = reverb.getParameters();
     reverbParameters.roomSize = graveyard ? 0.84f + 0.14f * blockIntensity : 0.72f + 0.22f * blockIntensity;
     reverbParameters.damping = graveyard ? 0.45f : 0.30f;
@@ -193,12 +270,19 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
 
     for (int i = 0; i < samples; ++i)
     {
-        const float intensity = juce::jlimit (0.0f, 110.0f, smoothedIntensity.getNextValue()) / 110.0f;
+        // Corruption pushes the whole effect up on its own (so it works as a one-knob macro
+        // even with Intensity at zero), and adds drive, extra reverb and a little hiss below.
+        const float corruption = smoothedCorruption.getNextValue();
+        const float knobIntensity = juce::jlimit (0.0f, 110.0f, smoothedIntensity.getNextValue()) / 110.0f;
+        const float intensity = juce::jlimit (0.0f, 1.0f, knobIntensity + corruption * 0.45f * (1.0f - knobIntensity));
         const float mix = juce::jlimit (0.0f, 1.0f, smoothedMix.getNextValue());
-        const float maxCutoff = softHighPass ? 200.0f : (graveyard ? 600.0f : 15000.0f);
+        // Never let the sweep reach Nyquist: at low sample rates 15 kHz would make the filter unstable.
+        const float maxCutoff = juce::jmin (softHighPass ? 200.0f : (graveyard ? 600.0f : 15000.0f), 0.45f * sr);
         const float cutoff = juce::jmap (std::pow (intensity, 1.35f), 20.0f, maxCutoff);
         for (auto& filter : highPassFilters)
             filter.setCutoffFrequency (cutoff);
+        for (auto& filter : washFilters)
+            filter.setCutoffFrequency (juce::jmin (cutoff, washMaxCutoff));
 
         const float delaySamples = juce::jlimit (1.0f, (float) (currentSampleRate * 1.24),
                                                  smoothedDelaySeconds.getNextValue() * (float) currentSampleRate);
@@ -219,11 +303,11 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                 {
                     const float gust = 0.55f + 0.45f * std::sin (lfoPhaseB);
                     const float centre = juce::jlimit (60.0f, maxBandCentre, 330.0f + (420.0f + 900.0f * intensity) * sweepA);
-                    const float level = 0.22f * gust * std::pow (intensity, 1.2f);
+                    const float level = 0.78f * gust * std::pow (intensity, 1.2f);
                     for (int channel = 0; channel < channels; ++channel)
                     {
                         scaryBandFilters[(size_t) channel].setCutoffFrequency (centre);
-                        layer[channel] = scaryBandFilters[(size_t) channel].processSample (0, channel == 0 ? noiseLeft : noiseRight) * level;
+                        layer[channel] = scaryBandFilters[(size_t) channel].process (channel == 0 ? noiseLeft : noiseRight) * level;
                     }
                     break;
                 }
@@ -236,11 +320,11 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                     const float osc = std::sin (scarePhase) + 0.55f * std::sin (2.0f * scarePhase)
                                     + 0.30f * std::sin (3.0f * scarePhase);
                     const float formant = juce::jlimit (60.0f, maxBandCentre, 1500.0f + 900.0f * intensity);
-                    const float level = 0.27f * std::pow (intensity, 1.1f);   // trimmed: was ~7 dB hotter than the other presets
+                    const float level = 0.037f * std::pow (intensity, 1.1f);
                     for (int channel = 0; channel < channels; ++channel)
                     {
                         scaryBandFilters[(size_t) channel].setCutoffFrequency (formant);
-                        const float voiced = scaryBandFilters[(size_t) channel].processSample (0, osc);
+                        const float voiced = scaryBandFilters[(size_t) channel].process (osc);
                         const float breath = (channel == 0 ? noiseLeft : noiseRight) * 0.075f;
                         layer[channel] = (std::tanh (voiced * 1.6f) + breath) * level;
                     }
@@ -251,18 +335,18 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                     const float centre = juce::jlimit (60.0f, maxBandCentre,
                                                        1800.0f + 2600.0f * (0.5f + 0.5f * std::sin (lfoPhaseC)));
                     const float trem = 0.5f + 0.5f * std::sin (lfoPhaseD);
-                    const float level = 0.22f * trem * trem * intensity;
+                    const float level = 0.45f * trem * trem * intensity;
                     for (int channel = 0; channel < channels; ++channel)
                     {
                         scaryBandFilters[(size_t) channel].setCutoffFrequency (centre);
-                        layer[channel] = scaryBandFilters[(size_t) channel].processSample (0, channel == 0 ? noiseLeft : noiseRight) * level;
+                        layer[channel] = scaryBandFilters[(size_t) channel].process (channel == 0 ? noiseLeft : noiseRight) * level;
                     }
                     break;
                 }
                 case 10: // Rattling Bones: random dry clicks that get denser as intensity rises
                 {
                     const float triggerChance = (3.0f + 55.0f * intensity * intensity) / sr;
-                    const float level = 0.45f * std::pow (intensity, 0.8f);
+                    const float level = 0.57f * std::pow (intensity, 0.8f);
                     for (int channel = 0; channel < channels; ++channel)
                     {
                         const float own = channel == 0 ? noiseLeft : noiseRight;
@@ -271,7 +355,7 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                             clickEnv[channel] = 0.5f + 0.5f * std::abs (other);
                         const float click = other * clickEnv[channel];
                         clickEnv[channel] *= clickDecay;
-                        layer[channel] = scaryBandFilters[(size_t) channel].processSample (0, click) * level;
+                        layer[channel] = scaryBandFilters[(size_t) channel].process (click) * level;
                     }
                     break;
                 }
@@ -289,11 +373,11 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                     };
                     const float drone = 0.5f * (stack (scarePhase) + stack (scarePhase2));
                     const float centre = juce::jlimit (60.0f, maxBandCentre, 220.0f + 380.0f * sweepA);
-                    const float level = 0.42f * std::pow (intensity, 0.9f);
+                    const float level = 0.47f * std::pow (intensity, 0.9f);
                     for (int channel = 0; channel < channels; ++channel)
                     {
                         scaryBandFilters[(size_t) channel].setCutoffFrequency (centre);
-                        layer[channel] = scaryBandFilters[(size_t) channel].processSample (0, drone) * level;
+                        layer[channel] = scaryBandFilters[(size_t) channel].process (drone) * level;
                     }
                     break;
                 }
@@ -309,11 +393,11 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                                       + 0.18f * std::sin (3.0f * scarePhase);
                     const float formant = juce::jlimit (60.0f, maxBandCentre, 700.0f + 700.0f * sweepA);
                     const float flutter = 0.65f + 0.35f * std::sin (lfoPhaseB);
-                    const float level = 0.25f * flutter * intensity;
+                    const float level = 0.126f * flutter * intensity;
                     for (int channel = 0; channel < channels; ++channel)
                     {
                         scaryBandFilters[(size_t) channel].setCutoffFrequency (formant);
-                        layer[channel] = std::tanh (scaryBandFilters[(size_t) channel].processSample (0, voice) * 1.2f) * level;
+                        layer[channel] = std::tanh (scaryBandFilters[(size_t) channel].process (voice) * 1.2f) * level;
                     }
                     break;
                 }
@@ -328,11 +412,11 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                     const float rough = 0.55f + 0.45f * std::sin (roughPhase);
                     const float formant = juce::jlimit (60.0f, maxBandCentre,
                                                         380.0f + 420.0f * (0.5f + 0.5f * std::sin (lfoPhaseC)));
-                    const float level = 0.35f * std::pow (intensity, 0.9f);
+                    const float level = 0.139f * std::pow (intensity, 0.9f);
                     for (int channel = 0; channel < channels; ++channel)
                     {
                         scaryBandFilters[(size_t) channel].setCutoffFrequency (formant);
-                        layer[channel] = std::tanh (scaryBandFilters[(size_t) channel].processSample (0, stack) * rough * 2.2f) * level;
+                        layer[channel] = std::tanh (scaryBandFilters[(size_t) channel].process (stack) * rough * 2.2f) * level;
                     }
                     break;
                 }
@@ -343,11 +427,11 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                                                        420.0f + 1500.0f * sweep * (0.35f + 0.65f * intensity));
                     const float stick = 0.35f + 0.65f * std::pow (juce::jmax (0.0f, 0.5f + 0.5f * std::sin (roughPhase)), 1.5f);
                     const float swell = 0.4f + 0.6f * (0.5f + 0.5f * std::sin (lfoPhaseB));
-                    const float level = 0.22f * stick * swell * std::pow (intensity, 0.9f);
+                    const float level = 1.03f * stick * swell * std::pow (intensity, 0.9f);
                     for (int channel = 0; channel < channels; ++channel)
                     {
                         scaryBandFilters[(size_t) channel].setCutoffFrequency (centre);
-                        layer[channel] = scaryBandFilters[(size_t) channel].processSample (0, channel == 0 ? noiseLeft : noiseRight) * level;
+                        layer[channel] = scaryBandFilters[(size_t) channel].process (channel == 0 ? noiseLeft : noiseRight) * level;
                     }
                     break;
                 }
@@ -371,7 +455,7 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                         wrapPhase (bellPhase[k]);
                         bellEnv[k] *= bellDecay[k];
                     }
-                    const float level = 0.14f * (0.3f + 0.7f * intensity);
+                    const float level = 0.031f * (0.3f + 0.7f * intensity);
                     layer[0] = layer[1] = sum * level;
                     break;
                 }
@@ -389,19 +473,21 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
 
         float dry[2] { 0.0f, 0.0f };
         float highPassed[2] { 0.0f, 0.0f };
+        float washInput[2] { 0.0f, 0.0f };
         float filtered[2] { 0.0f, 0.0f };
         float delayed[2] { 0.0f, 0.0f };
         for (int channel = 0; channel < channels; ++channel)
         {
             dry[channel] = buffer.getSample (channel, i);
             highPassed[channel] = highPassFilters[(size_t) channel].processSample (0, dry[channel]);
+            washInput[channel] = washFilters[(size_t) channel].processSample (0, dry[channel]);
         }
 
         // JUCE Reverb API expects channel pointers plus a sample count.
         // This loop processes one frame at a time, so the sample count is 1.
-        // The reverb runs wet-only; the high-passed dry signal is added back at unity gain.
+        // The reverb runs wet-only, fed by the capped wash high-pass; the high-passed dry signal is added back at unity gain.
         // Graveyard voices are also fed into the reverb so they get a long haunted tail.
-        float wet[2] { highPassed[0] + layer[0] * 0.5f, highPassed[1] + layer[1] * 0.5f };
+        float wet[2] { washInput[0] + layer[0] * 0.5f, washInput[1] + layer[1] * 0.5f };
         if (channels == 2)
             reverb.processStereo (&wet[0], &wet[1], 1);
         else
@@ -429,7 +515,7 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
             }
         }
 
-        const float noiseAmount = hasNoiseAndRiser ? (0.025f + 0.16f * intensity) * intensity : 0.0f;
+        const float noiseAmount = (hasNoiseAndRiser ? (0.025f + 0.16f * intensity) * intensity : 0.0f) + corruption * 0.02f;
 
         float riserFrequency = 80.0f;
         float riserLevel = 0.0f;
@@ -443,7 +529,7 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
         {
             // Hard: a continual riser that keeps climbing and restarts, with short
             // fades at each end of the loop so the restart never clicks.
-            riserRamp += 1.0f / (hardRiserLoopSeconds * (float) currentSampleRate);
+            riserRamp += 1.0f / (riserLoopSeconds * (float) currentSampleRate);
             if (riserRamp >= 1.0f)
                 riserRamp -= 1.0f;
             const float fade = juce::jmin (1.0f, riserRamp / 0.03f, (1.0f - riserRamp) / 0.05f);
@@ -455,12 +541,12 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
         if (riserPhase >= juce::MathConstants<float>::twoPi)
             riserPhase -= juce::MathConstants<float>::twoPi;
 
-        const float drive = 1.0f + intensity * (graveyard ? 1.2f : (mode < 2 ? 1.8f : (mode < 4 ? 2.8f : 4.2f)));
+        const float drive = 1.0f + intensity * (graveyard ? 1.2f : (mode < 2 ? 1.8f : (mode < 4 ? 2.8f : 4.2f))) + corruption * 0.8f;
         // Level compensation: a hard-driven saturator is far louder than the dry signal
         // (measured +9 to +21 dB at full intensity), so scale it back as drive rises.
         const float makeup = std::pow (drive, -0.55f);
         const float delayAmount = hasDelay ? intensity * (mode == 6 ? 0.32f : (graveyard ? 0.30f : 0.24f)) : 0.0f;
-        const float reverbAmount = graveyard ? 0.22f + intensity * 0.40f : 0.10f + intensity * 0.32f;
+        const float reverbAmount = juce::jmin (0.9f, (graveyard ? 0.22f + intensity * 0.40f : 0.10f + intensity * 0.32f) + corruption * 0.15f);
 
         for (int channel = 0; channel < channels; ++channel)
         {
