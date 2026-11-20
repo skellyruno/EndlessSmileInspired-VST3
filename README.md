@@ -72,15 +72,17 @@ animated rune ring is not included.
 
 ## Build on Windows
 
-1. Install Visual Studio 2022 with **Desktop development with C++**, CMake and Git.
+1. Install Visual Studio 2022 with **Desktop development with C++**, CMake, Git and Python 3.
 2. Open **Developer PowerShell for VS 2022** in this folder and run `.\build-windows.ps1`,
-   or run the **Build plugin artifacts** GitHub Actions workflow.
-3. Output: `build\EndlessSmileInspired_artefacts\Release\`.
+   or run the **Build and test Skeleton Graveyard** GitHub Actions workflow.
+3. The VST3 bundle is built at `build\EndlessSmileInspired_artefacts\Release\VST3\EndlessSmileInspired.vst3`.
+4. The script also validates and stages a flat preview package in `build\preview-artifacts\`
+   with `release-manifest.json` and `SHA256SUMS.txt`.
 
-The first build needs internet to fetch JUCE 8.0.4. The build target and file name
-are still `EndlessSmileInspired`; only the window title and the name reported to the
-host say "Skeleton Graveyard". Renaming the files means changing `PRODUCT_NAME` in
-`CMakeLists.txt` together with the paths in `.github/workflows/build.yml`.
+The first build needs internet to fetch JUCE 8.0.4. The build target, VST3 filename and
+host identity remain `EndlessSmileInspired`; the display name is "Skeleton Graveyard".
+Do not rename the VST3 bundle or change its stable identity fields without a compatibility
+migration plan.
 
 ## Offline DSP tests
 
@@ -95,16 +97,18 @@ pluginval.
 
 ## Verification status — please read
 
-- The interface and audio code up to the fog/knob/preset-timeline work was built by
-  CI and checked from screenshots.
-- The latest changes (everything from the performance restructuring onwards, including the
-  Necromancer-style main dial, tempo sync, scenes, skins, corruption and LITE mode) have only been type-checked against a minimal stand-in for the
-  JUCE API with g++, not built against real JUCE.
-- Nothing has been measured on a real host. Loudness figures come from a numeric model
-  of the signal path that leaves out JUCE's reverb. Graveyard voice levels were set
-  from numeric simulations and need listening checks.
-- Not yet done: pluginval, DAW session recall/automation tests, tests at 44.1/48/96 kHz
-  and different block sizes, and CPU profiling on a real machine.
+- Main commit `059a8151e64be4c7223667eef81780792da8526a` compiled the plugin against real
+  JUCE 8.0.4 on Windows in Actions run #25 on November 15, 2026. The Linux offline DSP test
+  and editor API signature check also passed in that run.
+- The run produced a real Windows x64 VST3 bundle. Release engineering inspected the
+  downloaded artifact and confirmed the inner module is AMD64 PE32+ and the three existing
+  VST3 class IDs match the protected identity.
+- That inspection also found the Actions download was a ZIP containing a second ZIP, and
+  JUCE's generated `moduleinfo.json` contained trailing commas. The release branch adds a
+  strict package normalizer/verifier, SHA-256 checksums and source/run provenance to prevent
+  those packaging defects from recurring.
+- No pluginval run, FL Studio scan/load, project recall, real audio A/B, rendered UI capture,
+  or owner-machine CPU/latency acceptance has been completed. Those remain release gates.
 
 ## Known behaviour worth knowing
 
@@ -125,3 +129,24 @@ The GitHub Actions workflow runs mock DSP and editor signature checks on Linux
 plus a real JUCE VST3 compile on Windows for PRs and manual requests.
 These checks do not establish FL Studio project recall, pluginval, UI rendering,
 real-world audio quality or real-host CPU/latency.
+
+## Windows preview artifact contract
+
+The Actions workflow uploads the staged directory directly; GitHub creates the one download
+archive. Do not put a pre-compressed ZIP inside the uploaded artifact. The archive contains
+exactly one `EndlessSmileInspired.vst3` bundle plus `release-manifest.json` and
+`SHA256SUMS.txt`.
+
+The package step verifies the VST3 bundle layout, AMD64 PE32+ machine type, single module
+binary, vendor/version metadata and the three protected class IDs. It normalizes only the
+staged copy of JUCE's `moduleinfo.json` to strict JSON; source build output and host IDs are
+not rewritten. The manifest records the source commit, branch, workflow run, file sizes and
+SHA-256 hashes. Five regression tests cover normalization, flat staging, wrong architecture,
+duplicate bundles and duplicate class IDs.
+
+The Actions artifact is retained for seven days. This repository is public, so its Actions
+artifact is not a private customer download. It is explicitly preview-only and is not a
+commercial release. The current vendor URL and support email are blank in the plugin metadata;
+the manifest records those omissions rather than inventing contact details. Licensing and
+attribution, FL Studio acceptance, real audio A/B, CPU/latency, pricing/trial and distribution
+approval remain open launch gates.

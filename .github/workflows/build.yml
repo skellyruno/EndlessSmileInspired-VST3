@@ -16,37 +16,62 @@ permissions:
 
 jobs:
   offline-tests:
-    name: Offline DSP and UI API checks (Linux)
+    name: Offline DSP, UI API and release-package checks (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Check plugin compatibility contract
         run: python3 tests/check_compatibility.py
       - name: Test actual processor with JUCE stand-in
         run: bash tests/run.sh
       - name: Type-check editor with JUCE stand-in
         run: bash tests/ui_check.sh
+      - name: Test VST3 preview package verifier
+        run: python3 -m unittest discover -s tests -p 'test_release_package.py' -v
 
   windows-vst3:
-    name: Windows x64 VST3 real JUCE build
+    name: Windows x64 VST3 real JUCE build and package verification
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Configure JUCE build
         run: cmake -S . -B build -A x64
       - name: Compile VST3
         run: cmake --build build --config Release --target EndlessSmileInspired_VST3 --parallel
-      - name: Package actual VST3 bundle
+      - name: Verify and stage one flat VST3 preview
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $vst3 = "build\EndlessSmileInspired_artefacts\Release\VST3\EndlessSmileInspired.vst3"
-          $binary = Join-Path $vst3 "Contents\x86_64-win\EndlessSmileInspired.vst3"
-          if (!(Test-Path $binary -PathType Leaf)) { throw "Missing VST3 binary: $binary" }
+          $vst3Root = "build\EndlessSmileInspired_artefacts\Release\VST3"
+          $bundle = Join-Path $vst3Root "EndlessSmileInspired.vst3"
+          if (!(Test-Path $bundle -PathType Container)) { throw "Missing VST3 bundle: $bundle" }
+          $bundles = @(Get-ChildItem -Path $vst3Root -Directory -Filter "*.vst3")
+          if ($bundles.Count -ne 1 -or $bundles[0].FullName -ne (Resolve-Path $bundle).Path) {
+            throw "Expected exactly one VST3 bundle in $vst3Root; found $($bundles.Count)"
+          }
           New-Item -ItemType Directory -Force artifacts | Out-Null
-          Compress-Archive -Path $vst3 -DestinationPath artifacts\EndlessSmileInspired-Windows-x64-VST3.zip -Force
-      - uses: actions/upload-artifact@v4
+          $pythonArgs = @(
+            "scripts/prepare_vst3_preview.py",
+            "--bundle", $bundle,
+            "--vst3-root", $vst3Root,
+            "--output-dir", "artifacts",
+            "--source-commit", "${{ github.sha }}",
+            "--workflow-run-id", "${{ github.run_id }}",
+            "--branch", "${{ github.ref_name }}"
+          )
+          & python @pythonArgs
+          if ($LASTEXITCODE -ne 0) { throw "VST3 preview package verification failed" }
+      - name: Upload flat preview artifact (not a nested ZIP)
+        uses: actions/upload-artifact@v4
         with:
-          name: SkeletonGraveyard-v1.2.0-Windows-x64-VST3
-          path: artifacts/EndlessSmileInspired-Windows-x64-VST3.zip
+          name: SkeletonGraveyard-v1.2.0-Windows-x64-VST3-preview
+          path: artifacts/
           if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
