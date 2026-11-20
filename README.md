@@ -130,6 +130,9 @@ plus a real JUCE VST3 compile on Windows for PRs and manual requests.
 These checks do not establish FL Studio project recall, pluginval, UI rendering,
 real-world audio quality or real-host CPU/latency.
 
+- The first PR Windows build passed, but its compiler log exposed MSVC warning C4458 because a local `playHead` name shadowed JUCE's `AudioProcessor::playHead`. The follow-up renames that local to `hostPlayHead` and guards against regression.
+- PR artifacts now record the actual PR head SHA and branch rather than GitHub's synthetic `1/merge` ref. The workflow also uses Node 24-compatible official Actions releases.
+
 ## Windows preview artifact contract
 
 The Actions workflow uploads the staged directory directly; GitHub creates the one download
@@ -140,7 +143,7 @@ exactly one `EndlessSmileInspired.vst3` bundle plus `release-manifest.json` and
 The package step verifies the VST3 bundle layout, AMD64 PE32+ machine type, single module
 binary, vendor/version metadata and the three protected class IDs. It normalizes only the
 staged copy of JUCE's `moduleinfo.json` to strict JSON; source build output and host IDs are
-not rewritten. The manifest records the source commit, branch, workflow run, file sizes and
+not rewritten. The manifest records the PR head/source commit, branch, workflow run, file sizes and
 SHA-256 hashes. Five regression tests cover normalization, flat staging, wrong architecture,
 duplicate bundles and duplicate class IDs.
 

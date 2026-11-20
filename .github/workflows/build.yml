@@ -19,8 +19,8 @@ jobs:
     name: Offline DSP, UI API and release-package checks (Linux)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.12'
       - name: Check plugin compatibility contract
@@ -61,14 +61,14 @@ jobs:
             "--bundle", $bundle,
             "--vst3-root", $vst3Root,
             "--output-dir", "artifacts",
-            "--source-commit", "${{ github.sha }}",
+            "--source-commit", "${{ github.event.pull_request.head.sha || github.sha }}",
             "--workflow-run-id", "${{ github.run_id }}",
-            "--branch", "${{ github.ref_name }}"
+            "--branch", "${{ github.head_ref || github.ref_name }}"
           )
           & python @pythonArgs
           if ($LASTEXITCODE -ne 0) { throw "VST3 preview package verification failed" }
       - name: Upload flat preview artifact (not a nested ZIP)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: SkeletonGraveyard-v1.2.0-Windows-x64-VST3-preview
           path: artifacts/

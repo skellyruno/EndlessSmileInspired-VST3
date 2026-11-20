@@ -160,9 +160,9 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
     bool validHostTempo = false;
     bool playing = false;
     float ppqPosition = -1.0f;
-    if (auto* playHead = getPlayHead())
+    if (auto* hostPlayHead = getPlayHead())
     {
-        if (auto position = playHead->getPosition())
+        if (auto position = hostPlayHead->getPosition())
         {
             const auto& info = *position;
             if (auto bpm = info.getBpm())
