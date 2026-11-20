@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "productName": "EndlessSmileInspired",
+  "displayName": "Skeleton Graveyard",
+  "vendor": "Skelly Audio",
+  "version": "1.2.0",
+  "bundleId": "audio.skelly.endlesssmileinspired",
+  "manufacturerCode": "Skly",
+  "pluginCode": "EsI1",
+  "classIds": [
+    "ABCDEF019182FAEB536B6C7945734931",
+    "ABCDEF011234ABCD536B6C7945734931",
+    "ABCDEF01C0DEF00D536B6C7945734931"
+  ]
+}
