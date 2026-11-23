@@ -28,8 +28,8 @@ def write_fake_pe(path: Path, machine: int = 0x8664, optional_magic: int = 0x20B
 
 def make_fixture(root: Path) -> tuple[Path, Path, Path]:
     vst3_root = root / "VST3"
-    bundle = vst3_root / "EndlessSmileInspired.vst3"
-    binary = bundle / "Contents" / "x86_64-win" / "EndlessSmileInspired.vst3"
+    bundle = vst3_root / "Skell Smile.vst3"
+    binary = bundle / "Contents" / "x86_64-win" / "Skell Smile.vst3"
     metadata = bundle / "Contents" / "Resources" / "moduleinfo.json"
     binary.parent.mkdir(parents=True)
     metadata.parent.mkdir(parents=True)
@@ -78,14 +78,14 @@ class ReleasePackageTests(unittest.TestCase):
                 workflow_run_id="12345",
                 branch="main",
             )
-            self.assertTrue((output / "EndlessSmileInspired.vst3").is_dir())
+            self.assertTrue((output / "Skell Smile.vst3").is_dir())
             self.assertTrue((output / "SHA256SUMS.txt").is_file())
             self.assertTrue((output / "release-manifest.json").is_file())
             self.assertFalse(any(output.rglob("*.zip")))
             normalized = json.loads(
-                (output / "EndlessSmileInspired.vst3/Contents/Resources/moduleinfo.json").read_text()
+                (output / "Skell Smile.vst3/Contents/Resources/moduleinfo.json").read_text()
             )
-            self.assertEqual(normalized["Name"], "EndlessSmileInspired")
+            self.assertEqual(normalized["Name"], "Skell Smile")
             self.assertTrue(manifest["previewOnly"])
             self.assertFalse(manifest["commercialReleaseApproved"])
             self.assertEqual(manifest["source"]["workflowRunId"], "12345")

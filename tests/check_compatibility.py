@@ -13,14 +13,14 @@ for stable in (
     'BUNDLE_ID "audio.skelly.endlesssmileinspired"',
     'PLUGIN_MANUFACTURER_CODE Skly',
     'PLUGIN_CODE EsI1',
-    'PRODUCT_NAME "EndlessSmileInspired"',
+    'PRODUCT_NAME "Skell Smile"',
     'FORMATS VST3',
 ):
     assert stable in cmake, f"Broken host/plugin compatibility: {stable}"
 
 version = re.search(r"project\(\s*EndlessSmileInspired\s+VERSION\s+([^\s)]+)", cmake)
 assert version and version.group(1) == identity["version"], "Release identity version differs from CMake"
-assert identity["productName"] == "EndlessSmileInspired", "Protected VST3 product name changed"
+assert identity["productName"] == "Skell Smile", "Protected VST3 product name changed"
 assert identity["bundleId"] == "audio.skelly.endlesssmileinspired", "Protected bundle ID changed"
 assert identity["manufacturerCode"] == "Skly" and identity["pluginCode"] == "EsI1", "Protected VST3 codes changed"
 assert len(identity["classIds"]) == 3 and len(set(identity["classIds"])) == 3, "VST3 class IDs must remain unique"

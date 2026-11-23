@@ -81,6 +81,11 @@ private:
     std::atomic<float>* corruptionParameter = nullptr;
     float levelEnv = 0.0f;
 
+    // Smooth the wet signal through dry when switching presets without allocation.
+    int activePreset = 0, pendingPreset = 0;
+    int presetTransition = 0; // 0 stable, 1 fade out, 2 fade in
+    float presetFade = 1.0f, presetFadeStep = 0.0f;
+
     double currentSampleRate = 44100.0;
     juce::Reverb reverb;
     std::array<juce::dsp::StateVariableTPTFilter<float>, 2> highPassFilters;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(EndlessSmileInspired VERSION 1.2.0)
+project(EndlessSmileInspired VERSION 1.4.0)
 include(FetchContent)
 FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.4 GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(JUCE)
@@ -9,7 +9,7 @@ juce_add_plugin(EndlessSmileInspired
     PLUGIN_MANUFACTURER_CODE Skly
     PLUGIN_CODE EsI1
     FORMATS VST3
-    PRODUCT_NAME "EndlessSmileInspired"
+    PRODUCT_NAME "Skell Smile"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
