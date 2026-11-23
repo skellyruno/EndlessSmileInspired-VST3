@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Static compatibility guard against the original EndlessSmileInspired VST3 host identity."""
 from pathlib import Path
+import json
 import re
 
 root = Path(__file__).resolve().parent.parent
 cmake = (root / "CMakeLists.txt").read_text()
 processor = (root / "Source/PluginProcessor.cpp").read_text()
+identity = json.loads((root / "release/vst3_identity.json").read_text(encoding="utf-8"))
 
 for stable in (
     'BUNDLE_ID "audio.skelly.endlesssmileinspired"',
@@ -15,6 +17,16 @@ for stable in (
     'FORMATS VST3',
 ):
     assert stable in cmake, f"Broken host/plugin compatibility: {stable}"
+
+version = re.search(r"project\(\s*EndlessSmileInspired\s+VERSION\s+([^\s)]+)", cmake)
+assert version and version.group(1) == identity["version"], "Release identity version differs from CMake"
+assert identity["productName"] == "EndlessSmileInspired", "Protected VST3 product name changed"
+assert identity["bundleId"] == "audio.skelly.endlesssmileinspired", "Protected bundle ID changed"
+assert identity["manufacturerCode"] == "Skly" and identity["pluginCode"] == "EsI1", "Protected VST3 codes changed"
+assert len(identity["classIds"]) == 3 and len(set(identity["classIds"])) == 3, "VST3 class IDs must remain unique"
+assert all(re.fullmatch(r"[0-9A-Fa-f]{32}", value) for value in identity["classIds"]), "Malformed VST3 class ID"
+assert "if (auto* hostPlayHead = getPlayHead())" in processor, "Host play-head local name must not shadow JUCE AudioProcessor::playHead"
+assert "if (auto* playHead = getPlayHead())" not in processor, "JUCE AudioProcessor::playHead shadow warning returned"
 
 params = re.findall(r'ParameterID\s*\{\s*"([^"]+)"\s*,\s*(\d+)\s*\}', processor)
 assert params[:3] == [('intensity', '1'), ('preset', '1'), ('mix', '1')], f"Legacy parameter IDs/order changed: {params}"
@@ -28,4 +40,4 @@ assert names[:7] == [
     'Smack You in the Face', 'Broken Teeth', 'Dada Dynamite',
 ], f"Legacy preset positions changed: {names[:7]}"
 assert len(names) == 16, f"Expected 16 presets, found {len(names)}"
-print('Compatibility contract passed: host identity, 5 automation parameters, 16 preset positions')
+print('Compatibility contract passed: host identity, 5 automation parameters, 16 preset positions, 3 VST3 class IDs')
