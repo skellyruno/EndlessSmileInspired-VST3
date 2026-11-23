@@ -107,7 +107,7 @@ def load_identity(repo_root: Path) -> dict[str, Any]:
 def read_cmake_version(repo_root: Path, identity: dict[str, Any]) -> str:
     cmake = (repo_root / "CMakeLists.txt").read_text(encoding="utf-8")
     match = re.search(
-        rf"project\(\s*{re.escape(identity['productName'])}\s+VERSION\s+([^\s)]+)",
+        rf"project\(\s*EndlessSmileInspired\s+VERSION\s+([^\s)]+)",
         cmake,
         re.IGNORECASE,
     )

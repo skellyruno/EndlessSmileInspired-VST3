@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "productName": "EndlessSmileInspired",
-  "displayName": "Skeleton Graveyard",
+  "productName": "Skell Smile",
+  "displayName": "Skell Smile",
   "vendor": "Skelly Audio",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "bundleId": "audio.skelly.endlesssmileinspired",
   "manufacturerCode": "Skly",
   "pluginCode": "EsI1",

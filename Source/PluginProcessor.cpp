@@ -62,6 +62,12 @@ void EndlessSmileInspiredAudioProcessor::prepareToPlay (double sampleRate, int s
 {
     juce::ignoreUnused (samplesPerBlock);
     currentSampleRate = sampleRate;
+    activePreset = juce::jlimit (0, presetCount - 1, juce::roundToInt (presetParameter->load()));
+    pendingPreset = activePreset;
+    presetFade = 1.0f;
+    presetTransition = 0;
+    constexpr float transitionSeconds = 0.008f; // 8ms down + 8ms up
+    presetFadeStep = 1.0f / juce::jmax (1.0f, (float) (sampleRate * transitionSeconds));
 
     reverb.setSampleRate (sampleRate);
 
@@ -148,7 +154,16 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
     for (int channel = getTotalNumInputChannels(); channel < getTotalNumOutputChannels(); ++channel)
         buffer.clear (channel, 0, samples);
 
-    const int mode = juce::jlimit (0, presetCount - 1, juce::roundToInt (presetParameter->load()));
+    pendingPreset = juce::jlimit (0, presetCount - 1, juce::roundToInt (presetParameter->load()));
+    // Switch algorithms only at a block boundary when the wet path is silent.
+    if (presetTransition == 1 && presetFade <= 0.0f)
+    {
+        activePreset = pendingPreset;
+        presetTransition = 2;
+    }
+    if (presetTransition != 1 && pendingPreset != activePreset)
+        presetTransition = 1;
+    const int mode = activePreset;
     const bool graveyard = (mode >= 7);
     const bool hasDelay = (mode == 1 || mode == 3 || mode == 5 || mode == 6 || mode == 8 || mode == 9 || mode == 12);
     const bool hasNoiseAndRiser = (mode >= 4 && mode <= 6);
@@ -270,6 +285,14 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
 
     for (int i = 0; i < samples; ++i)
     {
+        if (presetTransition == 1)
+            presetFade = juce::jmax (0.0f, presetFade - presetFadeStep);
+        else if (presetTransition == 2)
+        {
+            presetFade = juce::jmin (1.0f, presetFade + presetFadeStep);
+            if (presetFade >= 1.0f)
+                presetTransition = 0;
+        }
         // Corruption pushes the whole effect up on its own (so it works as a one-knob macro
         // even with Intensity at zero), and adds drive, extra reverb and a little hiss below.
         const float corruption = smoothedCorruption.getNextValue();
@@ -562,7 +585,12 @@ void EndlessSmileInspiredAudioProcessor::processBlock (juce::AudioBuffer<float>&
                            + riser * 0.55f;
             effected = softCeiling (effected);
             effected = juce::jmap (intensity, dry[channel], effected);
-            buffer.setSample (channel, i, dry[channel] * (1.0f - mix) + effected * mix);
+            // Exact dry bypass and smooth wet-to-dry transitions at preset changes.
+            if (intensity <= 0.0f || mix <= 0.0f)
+                buffer.setSample (channel, i, dry[channel]);
+            else
+                buffer.setSample (channel, i, dry[channel] * (1.0f - mix * presetFade)
+                                             + effected * (mix * presetFade));
         }
     }
 }
@@ -571,7 +599,7 @@ juce::AudioProcessorEditor* EndlessSmileInspiredAudioProcessor::createEditor()
 {
     return new EndlessSmileInspiredAudioProcessorEditor (*this);
 }
-const juce::String EndlessSmileInspiredAudioProcessor::getName() const { return "Skeleton Graveyard"; }
+const juce::String EndlessSmileInspiredAudioProcessor::getName() const { return "Skell Smile"; }
 bool EndlessSmileInspiredAudioProcessor::acceptsMidi() const { return false; }
 bool EndlessSmileInspiredAudioProcessor::producesMidi() const { return false; }
 bool EndlessSmileInspiredAudioProcessor::isMidiEffect() const { return false; }

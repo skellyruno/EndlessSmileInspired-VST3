@@ -8,8 +8,8 @@ cmake --build $buildDir --config Release --target EndlessSmileInspired_VST3 --pa
 if ($LASTEXITCODE -ne 0) { throw "VST3 compilation failed" }
 
 $vst3Root = Join-Path $buildDir "EndlessSmileInspired_artefacts\Release\VST3"
-$bundle = Join-Path $vst3Root "EndlessSmileInspired.vst3"
-$binary = Join-Path $bundle "Contents\x86_64-win\EndlessSmileInspired.vst3"
+$bundle = Join-Path $vst3Root "Skell Smile.vst3"
+$binary = Join-Path $bundle "Contents\x86_64-win\Skell Smile.vst3"
 if (!(Test-Path $binary -PathType Leaf)) { throw "Build returned success but no VST3 binary: $binary" }
 
 $python = Get-Command python -ErrorAction SilentlyContinue

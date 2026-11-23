@@ -259,6 +259,21 @@ int main()
         CHECK (r.rmsDb > -34.0 && r.rmsDb < -22.0, "%s voice level %.1f dBFS outside the -34..-22 target band", names[mode], r.rmsDb);
     }
 
+    std::printf ("\\n== 11. Preset switch crossfade: finite and recoverable ==\\n");
+    {
+        EndlessSmileInspiredAudioProcessor p; p.prepareToPlay (sr, 256);
+        setParams (p, 0, 110.0f);
+        const std::vector<float> steady ((size_t) sr * 2, 0.08f);
+        render (p, steady, 256, 2, y0, y1);
+        const float before = y0.back();
+        p.state.getRawParameterValue ("preset")->store (7.0f);
+        render (p, std::vector<float> ((size_t) sr * 3, 0.08f), 256, 2, y0, y1);
+        CHECK (std::abs (y0.front() - before) < 0.08f, "abrupt output on preset change: %.4f", std::abs (y0.front() - before));
+        const auto r = measure (y0, y1, (size_t) sr);
+        CHECK (r.finite && r.peak <= 1.0001, "preset change produced invalid audio");
+        CHECK (r.rmsDb > -65.0, "wet audio did not recover after preset transition: %.1f dB", r.rmsDb);
+    }
+
     std::printf ("\n%s (%d failures)\n", failures == 0 ? "ALL CHECKS PASSED" : "CHECKS FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

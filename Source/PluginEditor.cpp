@@ -1106,7 +1106,7 @@ void EndlessSmileInspiredAudioProcessorEditor::paint (juce::Graphics& g)
     // Footer: title, short accent rule and subtitle, all kept clear of the inner frame line.
     g.setColour (juce::Colour (0xffe9e2cf).withAlpha (0.92f));
     g.setFont (juce::Font (juce::FontOptions (24.0f, juce::Font::bold)));
-    g.drawText ("SKELETON GRAVEYARD", 26, getHeight() - 62,
+    g.drawText ("SKELL SMILE", 26, getHeight() - 62,
                 juce::roundToInt (w * 0.46f), 28, juce::Justification::centredLeft, true);
     g.setColour (juce::Colour (0xff39afd2).withAlpha (0.85f));
     g.fillRect (27.0f, (float) getHeight() - 33.0f, 44.0f, 2.0f);

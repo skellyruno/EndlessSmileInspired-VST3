@@ -1,4 +1,4 @@
-# Skeleton Graveyard — JUCE VST3 build-up / transition effect
+# Skell Smile — JUCE VST3 build-up / transition effect
 
 A one-knob build-up and transition effect with a skeleton mascot, in an original
 graveyard-themed interface. It is an independent implementation inspired by the
@@ -74,13 +74,12 @@ animated rune ring is not included.
 
 1. Install Visual Studio 2022 with **Desktop development with C++**, CMake, Git and Python 3.
 2. Open **Developer PowerShell for VS 2022** in this folder and run `.\build-windows.ps1`,
-   or run the **Build and test Skeleton Graveyard** GitHub Actions workflow.
-3. The VST3 bundle is built at `build\EndlessSmileInspired_artefacts\Release\VST3\EndlessSmileInspired.vst3`.
+   or run the **Build and test Skell Smile** GitHub Actions workflow.
+3. The VST3 bundle is built at `build\EndlessSmileInspired_artefacts\Release\VST3\Skell Smile.vst3`.
 4. The script also validates and stages a flat preview package in `build\preview-artifacts\`
    with `release-manifest.json` and `SHA256SUMS.txt`.
 
-The first build needs internet to fetch JUCE 8.0.4. The build target, VST3 filename and
-host identity remain `EndlessSmileInspired`; the display name is "Skeleton Graveyard".
+The first build needs internet to fetch JUCE 8.0.4. The build target stays `EndlessSmileInspired`; the VST3 bundle and DAW display name are `Skell Smile`. Stable host IDs remain unchanged.
 Do not rename the VST3 bundle or change its stable identity fields without a compatibility
 migration plan.
 
@@ -120,7 +119,7 @@ pluginval.
 
 ## v1.2.0 upgrade and CI notes
 
-The VST3 product name, bundle ID, manufacturer and plugin codes are deliberately
+The VST3 class IDs, bundle ID, manufacturer and plugin codes are deliberately
 unchanged to preserve host plugin identification. The first three automation
 parameter IDs (`intensity`, `preset`, `mix`) are unchanged, the original seven
 preset slots retain their indices, and `sync`/`corruption` are added at the end.
@@ -137,7 +136,7 @@ real-world audio quality or real-host CPU/latency.
 
 The Actions workflow uploads the staged directory directly; GitHub creates the one download
 archive. Do not put a pre-compressed ZIP inside the uploaded artifact. The archive contains
-exactly one `EndlessSmileInspired.vst3` bundle plus `release-manifest.json` and
+exactly one `Skell Smile.vst3` bundle plus `release-manifest.json` and
 `SHA256SUMS.txt`.
 
 The package step verifies the VST3 bundle layout, AMD64 PE32+ machine type, single module
@@ -153,3 +152,7 @@ commercial release. The current vendor URL and support email are blank in the pl
 the manifest records those omissions rather than inventing contact details. Licensing and
 attribution, FL Studio acceptance, real audio A/B, CPU/latency, pricing/trial and distribution
 approval remain open launch gates.
+
+## v1.4.0 Skell Smile preview
+
+The plugin and Windows VST3 bundle are now **Skell Smile**. Preserved 16 preset positions, five parameter IDs, class IDs and the original animated scene editor. Added 8 ms wet-to-dry-to-wet preset-switch smoothing. The real Windows build, pluginval, FL Studio recall, screenshot and real audio A/B remain preview validation gates.

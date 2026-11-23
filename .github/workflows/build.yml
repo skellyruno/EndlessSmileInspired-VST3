@@ -1,4 +1,4 @@
-name: Build and test Skeleton Graveyard
+name: Build and test Skell Smile
 
 on:
   pull_request:
@@ -49,7 +49,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $vst3Root = "build\EndlessSmileInspired_artefacts\Release\VST3"
-          $bundle = Join-Path $vst3Root "EndlessSmileInspired.vst3"
+          $bundle = Join-Path $vst3Root "Skell Smile.vst3"
           if (!(Test-Path $bundle -PathType Container)) { throw "Missing VST3 bundle: $bundle" }
           $bundles = @(Get-ChildItem -Path $vst3Root -Directory -Filter "*.vst3")
           if ($bundles.Count -ne 1 -or $bundles[0].FullName -ne (Resolve-Path $bundle).Path) {
@@ -70,7 +70,7 @@ jobs:
       - name: Upload flat preview artifact (not a nested ZIP)
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: SkeletonGraveyard-v1.2.0-Windows-x64-VST3-preview
+          name: SkellSmile-v1.4.0-Windows-x64-VST3-preview
           path: artifacts/
           if-no-files-found: error
           retention-days: 7
